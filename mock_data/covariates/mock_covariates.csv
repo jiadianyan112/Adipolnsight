@@ -1,0 +1,4 @@
+subject_id,age,sex,BMI,smoking_status,alcohol_intake,physical_activity
+DEMO_001,58,Female,25.6,Never,Low,Moderate
+DEMO_002,62,Male,23.1,Former,Moderate,High
+DEMO_003,55,Female,29.9,Current,Low,Low
