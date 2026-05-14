@@ -1,9 +1,9 @@
 import { PIPELINE_ORDER, TASK_TYPE_LABELS } from '../../types';
 import type { AnalysisTask } from '../../types';
 
-interface Props { tasks: AnalysisTask[]; currentStep: number; }
+interface Props { tasks: AnalysisTask[]; }
 
-export default function WorkflowStepper({ tasks, currentStep }: Props) {
+export default function WorkflowStepper({ tasks }: Props) {
   const statusMap: Record<string, string> = {};
   tasks.forEach((t) => { statusMap[t.task_type] = t.status; });
 

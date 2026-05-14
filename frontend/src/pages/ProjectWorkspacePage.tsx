@@ -16,7 +16,7 @@ export default function ProjectWorkspacePage() {
   const nav = useNavigate();
   const { currentProject, fetchProject } = useProjectStore();
   const { tasks, fetchTasks, createTask, rerunTask, runFullPipeline, startPolling, stopPolling } = useTaskStore();
-  const { currentResult, fetchResult, generateReport, currentReport } = useResultStore();
+  const { currentResult, fetchResult, generateReport } = useResultStore();
 
   const [viewingTaskId, setViewingTaskId] = useState<number | null>(null);
   const [showLog, setShowLog] = useState<number | null>(null);
@@ -74,7 +74,7 @@ export default function ProjectWorkspacePage() {
         )}
       </div>
 
-      <WorkflowStepper tasks={tasks} currentStep={0} />
+      <WorkflowStepper tasks={tasks} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {PIPELINE_ORDER.map((tt) => (

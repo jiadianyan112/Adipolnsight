@@ -25,7 +25,7 @@ def generate_report(project_id: int, background_tasks: BackgroundTasks, db: Sess
     db.add(report)
     db.commit()
     db.refresh(report)
-    log_audit(db, project_id, "generate_report", report_id=report.id)
+    log_audit(db, project_id, "generate_report", detail={"report_id": report.id})
     return report
 
 

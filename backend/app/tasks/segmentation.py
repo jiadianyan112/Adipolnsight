@@ -1,4 +1,5 @@
 from backend.app.tasks.base import BaseSkillRunner, register
+from backend.app.config import ANALYSIS_SCRIPTS_DIR
 
 
 @register
@@ -8,9 +9,10 @@ class SegmentationSkillRunner(BaseSkillRunner):
 
     def build_command(self, inputs: dict) -> list[str]:
         project_id = inputs["project_id"]
+        script = ANALYSIS_SCRIPTS_DIR / self.script_path
         out_dir = f"storage/projects/{project_id}/outputs/segmentation"
         return [
-            "python", str(self.script_path),
+            "python", str(script),
             "--output-dir", out_dir,
             "--task-id", str(inputs.get("task_id", "")),
         ]

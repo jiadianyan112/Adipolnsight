@@ -1,10 +1,9 @@
 import { useEffect } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useResultStore } from '../stores/resultStore';
 import ReportViewer from '../components/report/ReportViewer';
 
 export default function ReportPage() {
-  const { id } = useParams<{ id: string }>();
   const { currentReport, fetchReport } = useResultStore();
   const loc = useLocation();
 

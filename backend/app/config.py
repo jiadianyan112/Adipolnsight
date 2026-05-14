@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 STORAGE_DIR = BASE_DIR / "storage"
 MOCK_DATA_DIR = BASE_DIR / "mock_data"
 ANALYSIS_SCRIPTS_DIR = BASE_DIR / "analysis_scripts"
