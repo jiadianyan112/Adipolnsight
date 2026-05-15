@@ -11,16 +11,16 @@ export default function ProjectCard({ project, onDelete }: { project: Project; o
       </div>
       <p className="text-sm text-gray-500 mb-3 line-clamp-2">{project.research_goal}</p>
       <div className="flex gap-2 text-xs text-gray-400 mb-3">
-        <span>Exposure: {project.exposure}</span>
+        <span>暴露因素： {project.exposure}</span>
         <span>|</span>
-        <span>Outcome: {project.outcome}</span>
+        <span>结局变量： {project.outcome}</span>
       </div>
       <div className="flex gap-2">
         <Link to={`/projects/${project.id}`} className="text-sm text-blue-600 hover:underline">
-          Open Workspace →
+          打开工作区 →
         </Link>
         <button onClick={() => onDelete(project.id)} className="text-sm text-red-400 hover:text-red-600 ml-auto">
-          Delete
+          删除
         </button>
       </div>
     </div>

@@ -4,31 +4,29 @@
 
 ## 快速启动
 
+在项目目录下运行命令行窗口
 ### 后端
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+Windows: .venv\Scripts\activate   # Linux:source .venv/bin/activate
 pip install -r requirements.txt
 cd ..
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
 ### 前端
-
+在项目目录下新运行一个命令行窗口
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### 一键 Demo
+### 网址
+打开 http://localhost:5173
 
-1. 打开 http://localhost:5173
-2. 点击 "一键创建 Demo 项目"
-3. 进入工作台，点击 "Run Full Pipeline"
-4. 查看各步骤结果，生成科研报告
 
 ## 技术栈
 

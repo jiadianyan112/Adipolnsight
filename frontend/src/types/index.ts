@@ -66,13 +66,13 @@ export interface FileAsset {
 }
 
 export const TASK_TYPE_LABELS: Record<string, string> = {
-  image_segmentation: 'AI Image Segmentation',
-  gwas_analysis: 'GWAS Analysis',
-  opengwas_fetch: 'OpenGWAS Data Fetch',
-  mendelian_randomization: 'Mendelian Randomization',
-  mediation_mr: 'Mediation MR',
-  risk_modeling: 'Risk Modeling',
-  report_generation: 'Report Generation',
+  image_segmentation: 'AI 影像分割',
+  gwas_analysis: 'GWAS 分析',
+  opengwas_fetch: 'OpenGWAS 数据获取',
+  mendelian_randomization: '孟德尔随机化分析',
+  mediation_mr: '中介 MR 分析',
+  risk_modeling: '风险建模',
+  report_generation: '报告生成',
 };
 
 export const PIPELINE_ORDER = [

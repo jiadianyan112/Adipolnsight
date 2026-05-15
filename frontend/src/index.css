@@ -1,1 +1,249 @@
 @import "tailwindcss";
+
+/* ===== AdipoInsight Design Token System ===== */
+
+@theme {
+  /* Primary — deep navy for navbars, primary buttons, brand identity */
+  --color-navy-950: #0A1628;
+  --color-navy-900: #0F2040;
+  --color-navy-800: #152D54;
+  --color-navy-700: #1A3A6C;
+  --color-navy-600: #1E40AF;
+
+  /* Secondary — medical tech blue for links, data viz, info states */
+  --color-blue-600: #2563EB;
+  --color-blue-500: #3B82F6;
+  --color-blue-400: #60A5FA;
+  --color-blue-100: #DBEAFE;
+  --color-blue-50: #EFF6FF;
+
+  /* Accent — warm gold for selected states, highlights, CTAs */
+  --color-gold-600: #B8860B;
+  --color-gold-500: #D4A853;
+  --color-gold-400: #E8C876;
+  --color-gold-100: #FDF6E3;
+  --color-gold-50: #FFFBEB;
+
+  /* Teal — medical/healthcare accent */
+  --color-teal-600: #0891B2;
+  --color-teal-500: #06B6D4;
+  --color-teal-100: #CFFAFE;
+  --color-teal-50: #ECFEFF;
+
+  /* Success green */
+  --color-green-600: #059669;
+  --color-green-500: #10B981;
+  --color-green-100: #D1FAE5;
+  --color-green-50: #ECFDF5;
+
+  /* Surfaces */
+  --color-surface: #F4F7FA;
+  --color-surface-alt: #EEF2F6;
+  --color-card: #FFFFFF;
+
+  /* Borders */
+  --color-border: #E2E8F0;
+  --color-border-light: #F1F5F9;
+
+  /* Text */
+  --color-text-primary: #1E293B;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+
+  /* Destructive */
+  --color-danger-600: #DC2626;
+  --color-danger-100: #FEE2E2;
+  --color-danger-50: #FEF2F2;
+
+  /* Typography */
+  --font-family-heading: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-body: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Radius */
+  --radius-card: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-button: 0.5rem;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 12px 0 rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-card-selected: 0 0 0 2px rgba(30, 64, 175, 0.3), 0 4px 16px 0 rgba(30, 64, 175, 0.12);
+  --shadow-nav: 0 2px 8px 0 rgba(0, 0, 0, 0.12);
+}
+
+/* ===== Base Layer ===== */
+@layer base {
+  html {
+    font-family: var(--font-family-body);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(30, 64, 175, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(8, 145, 178, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(148, 163, 184, 0.02) 0%, transparent 70%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-family-heading);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* ===== Component Layer ===== */
+@layer components {
+  /* Dashboard card: white, rounded, subtle shadow */
+  .card-dashboard {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 200ms ease, border-color 200ms ease;
+  }
+  .card-dashboard:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .card-dashboard.selected {
+    border-color: var(--color-navy-600);
+    box-shadow: var(--shadow-card-selected);
+    background: var(--color-blue-50);
+  }
+
+  /* Navbar */
+  .navbar-dark {
+    background: linear-gradient(135deg, var(--color-navy-900) 0%, var(--color-navy-800) 100%);
+    box-shadow: var(--shadow-nav);
+  }
+
+  /* Section title */
+  .section-title {
+    font-family: var(--font-family-heading);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--color-text-primary);
+    letter-spacing: -0.01em;
+  }
+  .section-title-sm {
+    font-family: var(--font-family-heading);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Upload dropzone */
+  .upload-dropzone {
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface-alt);
+    transition: border-color 200ms ease, background-color 200ms ease;
+    cursor: pointer;
+  }
+  .upload-dropzone:hover {
+    border-color: var(--color-blue-400);
+    background: var(--color-blue-50);
+  }
+
+  /* Metric value display */
+  .metric-value {
+    font-family: var(--font-family-heading);
+    font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    color: var(--color-text-primary);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+  }
+
+  /* Transition utilities */
+  .transition-card {
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* ===== Interaction States ===== */
+@layer components {
+  .focus-ring {
+    outline: 2px solid var(--color-navy-600);
+    outline-offset: 2px;
+  }
+
+  /* Scrollable table wrapper */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Skeleton loading pulse */
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-surface-alt) 25%, var(--color-border-light) 50%, var(--color-surface-alt) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+}
+
+/* ===== Utility Layer ===== */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ===== Animations ===== */
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== Responsive breakpoints reference =====
+   sm:  640px   — mobile landscape
+   md:  768px   — tablet portrait
+   lg:  1024px  — tablet landscape / small desktop
+   xl:  1280px  — desktop
+   2xl: 1536px  — large desktop
+   3xl: 1920px  — extra large (custom via max-w-3xl override)
+*/
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== Large screen fluidity (beyond 1440px) ===== */
+@media (min-width: 1536px) {
+  .card-dashboard {
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* ===== Mobile nav adjustments ===== */
+@media (max-width: 767px) {
+  .navbar-dark {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}

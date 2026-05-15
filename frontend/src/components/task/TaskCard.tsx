@@ -28,19 +28,19 @@ export default function TaskCard({ task, onRun, onViewResult, onRerun }: Props) 
         {!task.id ? (
           <button onClick={() => onRun(task.task_type)}
             className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">
-            Run
+            运行
           </button>
         ) : null}
         {hasResult && (
           <button onClick={() => onViewResult(task.id)}
             className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700">
-            View Result
+            查看结果
           </button>
         )}
         {isFailed && (
           <button onClick={() => onRerun(task.id)}
             className="bg-orange-500 text-white px-3 py-1 rounded text-xs hover:bg-orange-600">
-            Rerun
+            重新运行
           </button>
         )}
       </div>

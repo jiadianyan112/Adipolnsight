@@ -23,14 +23,14 @@ export default function ProjectForm({ onSubmit, loading }: Props) {
 
   return (
     <form onSubmit={handle} className="space-y-4 max-w-lg">
-      {field('Project Name *', 'name', true)}
-      {field('Research Goal', 'research_goal')}
-      {field('Exposure (e.g. Liver_PDFF)', 'exposure')}
-      {field('Outcome (e.g. Osteoporosis)', 'outcome')}
-      {field('Mediator Set', 'mediator_set')}
+      {field('项目名称 *', 'name', true)}
+      {field('研究目标', 'research_goal')}
+      {field('暴露因素（如 Liver_PDFF）', 'exposure')}
+      {field('结局变量（如 骨质疏松）', 'outcome')}
+      {field('中介变量集', 'mediator_set')}
       <button type="submit" disabled={loading}
         className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-        {loading ? 'Creating...' : 'Create Project'}
+        {loading ? '创建中...' : '创建项目'}
       </button>
     </form>
   );
