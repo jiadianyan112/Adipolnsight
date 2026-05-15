@@ -24,3 +24,10 @@ Thumbs.db
 
 # Storage (runtime)
 storage/
+
+# Playwright test artifacts
+.playwright-mcp/
+*.png
+
+# Local settings
+.claude/settings.local.json
