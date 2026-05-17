@@ -1,13 +1,14 @@
 """
 Agent Orchestrator — 自然语言 → AI Job 编排
 
-连接 Intent Parser + AI Skill Registry + Job Manager，
+连接 Hybrid Intent Parser + AI Skill Registry + Job Manager，
 实现从用户自然语言 query 到 AI 分析任务创建的全链路。
 
 约束：
 - 不直接生成分析结果（结果由 Skill Adapter 产生）
-- 不替换 Intent Parser 的意图识别
+- 意图识别统一通过 hybrid_intent_parser，不直接调用 rule / llm parser
 - 参数不足时返回补全指引，不猜测参数
+- 创建 Job 前通过 Skill.validate_input() 进行二次校验
 
 用法：
     from backend.app.ai.agent_orchestrator import agent_orchestrator
@@ -25,8 +26,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
 
 import backend.app.ai.skills  # noqa: F401 — 确保所有 Skill 已注册
-from backend.app.ai.llm.hybrid_intent_parser import hybrid_intent_parser
-from backend.app.ai.intent_parser import IntentParseResult as IntentResult
+from backend.app.ai.llm.hybrid_intent_parser import (
+    hybrid_intent_parser,
+    IntentParseResult as IntentResult,
+)
 from backend.app.ai.registry import registry as skill_registry
 from backend.app.ai.job_manager import job_manager
 
@@ -292,7 +295,30 @@ class AgentOrchestrator:
         intent_result: IntentResult,
         query: str,
     ) -> OrchestratorResult:
-        """创建并启动 Job"""
+        """创建并启动 Job（含二次校验）"""
+        # 二次校验：通过 Skill.validate_input() 验证参数
+        skill = self._registry.get(cap_type)
+        if skill is None:
+            return OrchestratorResult(
+                answer_type="error",
+                message=f"能力 '{cap_type}' 已识别但 Skill 未注册，请联系管理员",
+                capability_type=cap_type,
+                extracted_params=params,
+                next_actions=[
+                    NextAction("查看可用能力", "view_capabilities"),
+                ],
+                intent_confidence=intent_result.confidence,
+                raw_query=query,
+            )
+
+        if not skill.validate_input(params):
+            hints = PARAM_HINTS.get(cap_type, {})
+            required = hints.get("required", [])
+            missing = [p for p in required if p not in params or not params[p]]
+            return self._make_need_more_info(
+                cap_type, intent_result, params, missing or ["validate_input failed"], query
+            )
+
         job = self._job_manager.create_job(
             capability_type=cap_type,
             input_data=params,

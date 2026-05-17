@@ -16,56 +16,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-
-# ===== 标准输出结构 =====
-
-# 标准 intent 枚举（前端 Agent 据此展示状态）
-STANDARD_INTENT = (
-    "segmentation", "phenotype", "gwas", "mr", "mediation_mr",
-    "risk_modeling", "report", "result_interpretation",
-    "job_status", "chat", "unsupported",
+from backend.app.ai.intent_types import (
+    IntentParseResult,
+    IntentResult,  # noqa: F401 — backward-compatible alias
+    STANDARD_INTENT,
 )
-
-IntentSource = Literal["rule", "llm", "hybrid"]
-
-
-@dataclass
-class IntentParseResult:
-    """
-    标准意图解析结果（rule / llm / hybrid parser 统一使用）。
-
-    前端 AI Agent 根据 intent 字段决定展示哪个状态卡片：
-    - segmentation/phenotype/gwas/mr/mediation_mr/risk_modeling/report → 创建任务
-    - result_interpretation → 结果解读
-    - job_status → 查看任务状态
-    - chat → 通用对话回复
-    - unsupported → 暂不支持
-    """
-    intent: str                                # 标准 intent 枚举值
-    confidence: float = 0.0                    # 0.0–1.0
-    capability_type: str = ""                  # AI capability type（如 "gwas_analysis"）
-    extracted_params: Dict[str, Any] = field(default_factory=dict)
-    missing_params: List[str] = field(default_factory=list)
-    next_action: str = ""                      # 建议的下一步 action 名称
-    user_message: str = ""                     # 展示给用户的友好消息
-    source: str = "rule"                       # rule | llm | hybrid
-    warnings: List[str] = field(default_factory=list)
-    raw_input: str = ""
-
-    # 向后兼容别名
-    @property
-    def clarification_needed(self) -> bool:
-        return self.intent == "unsupported" or len(self.missing_params) > 0
-
-    @property
-    def clarification_question(self) -> str:
-        return self.user_message
-
-
-# 保留旧名称作为别名
-IntentResult = IntentParseResult
 
 
 # ===== Intent Pattern 定义 =====

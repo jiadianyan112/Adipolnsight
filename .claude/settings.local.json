@@ -100,7 +100,12 @@
       "Bash(backend/.venv/Scripts/pip install *)",
       "Bash(PYTHONPATH=\"E:/Adipolnsight\" LLM_PROVIDER=deepseek backend/.venv/Scripts/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000)",
       "Bash(PYTHONPATH=\"E:/Adipolnsight\" backend/.venv/Scripts/python backend/app/ai/test_intent_parser.py)",
-      "Bash(PYTHONPATH=\"E:/Adipolnsight\" backend/.venv/Scripts/python backend/app/ai/test_agent_orchestrator.py)"
+      "Bash(PYTHONPATH=\"E:/Adipolnsight\" backend/.venv/Scripts/python backend/app/ai/test_agent_orchestrator.py)",
+      "Bash(Get-ChildItem -Directory \"E:/Adipolnsight\" -Depth 1)",
+      "Bash(Select-Object FullName)",
+      "Bash(python -m pytest --version)",
+      "Bash(python *)",
+      "Bash(PYTHONPATH=E:/Adipolnsight/backend python *)"
     ]
   }
 }

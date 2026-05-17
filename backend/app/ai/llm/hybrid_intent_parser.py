@@ -15,10 +15,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from backend.app.ai.intent_parser import (
-    intent_parser as rule_parser,
-    IntentParseResult,
-)
+from backend.app.ai.intent_types import IntentParseResult
+from backend.app.ai.intent_parser import intent_parser as rule_parser
 
 logger = logging.getLogger("adipoinsight.hybrid_parser")
 

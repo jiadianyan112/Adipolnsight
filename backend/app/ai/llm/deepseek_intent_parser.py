@@ -18,7 +18,7 @@ from typing import Any, Dict, List
 
 from backend.app.ai.llm.service import llm_service
 from backend.app.schemas.llm import LLMRequest, LLMMessage, LLMIntentResult
-from backend.app.ai.intent_parser import IntentParseResult, STANDARD_INTENT
+from backend.app.ai.intent_types import IntentParseResult, STANDARD_INTENT
 
 logger = logging.getLogger("adipoinsight.llm.intent_parser")
 
