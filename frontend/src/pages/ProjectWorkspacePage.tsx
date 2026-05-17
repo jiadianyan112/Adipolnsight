@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useResultStore } from '../stores/resultStore';
+import type { SegmentationResultData } from '../components/result/SegmentationResultView';
 import PageShell from '../components/shared/PageShell';
 import SectionTitle from '../components/shared/SectionTitle';
 import DashboardCard from '../components/shared/DashboardCard';
@@ -13,11 +14,14 @@ import ImageProcessingModule from '../components/analysis/ImageProcessingModule'
 import GWASModule from '../components/analysis/GWASModule';
 import MRModule from '../components/analysis/MRModule';
 import MediationMRModule from '../components/analysis/MediationMRModule';
+import RiskModelingModule from '../components/analysis/RiskModelingModule';
+import ChatInput from '../components/agent/ChatInput';
 import WorkflowSelectionPanel, { type WorkflowKey } from '../components/workflow/WorkflowSelectionPanel';
 import WorkflowStepper from '../components/task/WorkflowStepper';
 import TaskCard from '../components/task/TaskCard';
 import TaskLogViewer from '../components/task/TaskLogViewer';
 import UnifiedResultView from '../components/result/UnifiedResultView';
+import SegmentationResultView from '../components/result/SegmentationResultView';
 import { PIPELINE_ORDER, TASK_TYPE_LABELS } from '../types';
 
 export default function ProjectWorkspacePage() {
@@ -31,6 +35,7 @@ export default function ProjectWorkspacePage() {
   const [viewingTaskId, setViewingTaskId] = useState<number | null>(null);
   const [showLog, setShowLog] = useState<number | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowKey>('mediation');
+  const [segmentationData, setSegmentationData] = useState<SegmentationResultData | null>(null);
 
   useEffect(() => {
     fetchProject(pid);
@@ -110,14 +115,30 @@ export default function ProjectWorkspacePage() {
         </div>
       </div>
 
+      {/* ===== AI Agent Chat Input ===== */}
+      <div className="mb-5">
+        <ChatInput
+          projectId={pid}
+          context={{
+            exposure: currentProject?.exposure || 'Liver_PDFF',
+            outcome: currentProject?.outcome || 'Osteoporosis',
+          }}
+        />
+      </div>
+
       {/* ===== Main Dashboard Grid ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
         {/* ===== LEFT: Image Processing Module ===== */}
         <div className="lg:col-span-3">
           <ImageProcessingModule
             imageTask={taskMap['image_segmentation']}
+            projectId={pid}
             onViewResult={handleViewResult}
             onSaveAndContinue={handleRunAll}
+            onSegmentationComplete={(data) => {
+              setSegmentationData(data);
+              setViewingTaskId(0); // 0 = 来自 ImageProcessingModule
+            }}
           />
         </div>
 
@@ -156,13 +177,19 @@ export default function ProjectWorkspacePage() {
           <GWASModule
             gwasTask={taskMap['gwas_analysis']}
             opengwasTask={taskMap['opengwas_fetch']}
+            projectId={pid}
+            phenotypeName={currentProject?.exposure || 'Liver_PDFF'}
             onViewResult={handleViewResult}
             onRunTask={handleRun}
+            onGWASComplete={(data) => setSegmentationData(null)}
           />
         )}
         {selectedWorkflow === 'mr' && (
           <MRModule
             mrTask={taskMap['mendelian_randomization']}
+            projectId={pid}
+            exposureName={currentProject?.exposure || 'Liver_PDFF'}
+            outcomeName={currentProject?.outcome || 'Osteoporosis'}
             onViewResult={handleViewResult}
             onRunTask={handleRun}
           />
@@ -170,10 +197,23 @@ export default function ProjectWorkspacePage() {
         {selectedWorkflow === 'mediation' && (
           <MediationMRModule
             mediationTask={taskMap['mediation_mr']}
+            projectId={pid}
+            exposureName={currentProject?.exposure || 'Liver_PDFF'}
+            outcomeName={currentProject?.outcome || 'Osteoporosis'}
             onViewResult={handleViewResult}
             onRunTask={handleRun}
           />
         )}
+
+        {/* Risk Modeling — always visible when pipeline has relevant tasks */}
+        <RiskModelingModule
+          riskTask={taskMap['risk_modeling']}
+          projectId={pid}
+          exposureName={currentProject?.exposure || 'Liver_PDFF'}
+          outcomeName={currentProject?.outcome || 'Osteoporosis'}
+          onViewResult={handleViewResult}
+          onRunTask={handleRun}
+        />
 
         {/* Pipeline Overview — all tasks */}
         <DashboardCard padding="lg">
@@ -236,8 +276,16 @@ export default function ProjectWorkspacePage() {
           </div>
         </DashboardCard>
 
-        {/* Result Detail */}
-        {viewingTaskId && currentResult && (
+        {/* Result Detail — from ImageProcessingModule (segmentation) */}
+        {viewingTaskId === 0 && segmentationData && (
+          <SegmentationResultView
+            data={segmentationData}
+            onClose={() => { setViewingTaskId(null); setSegmentationData(null); }}
+          />
+        )}
+
+        {/* Result Detail — from legacy AnalysisTask */}
+        {viewingTaskId && viewingTaskId !== 0 && currentResult && (
           <DashboardCard padding="lg">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-heading font-semibold text-text-primary">
@@ -253,9 +301,13 @@ export default function ProjectWorkspacePage() {
                 关闭
               </SecondaryButton>
             </div>
-            <UnifiedResultView result={currentResult} />
+            <UnifiedResultView
+              result={currentResult}
+              segmentationData={currentResult.result_type === 'image_segmentation' ? segmentationData : null}
+              onClose={() => { setViewingTaskId(null); setShowLog(null); }}
+            />
             <button
-              onClick={() => setShowLog(viewingTaskId)}
+              onClick={() => setShowLog(viewingTaskId!)}
               className="text-sm text-navy-600 hover:text-navy-800 mt-3 font-medium transition-card"
             >
               查看日志 →
