@@ -25,9 +25,22 @@ from backend.app.config import (
     LLM_PROVIDER as CONFIG_LLM_PROVIDER,
     LLM_TIMEOUT_MS,
     LLM_MAX_RETRIES,
+    LLM_MAX_TOKENS,
     LLM_JSON_TEMPERATURE,
     LLM_TEXT_TEMPERATURE,
 )
+
+# ===== 安全约束：每类 task 的 max_tokens 上限 =====
+
+_MAX_TOKENS_LIMITS: Dict[str, int] = {
+    "intent_parse": 1024,
+    "parameter_completion": 1024,
+    "error_explanation": 1024,
+    "chat": 2048,
+    "result_interpretation": 2048,
+    "report_generation": 8192,
+    "summary": 1024,
+}
 
 logger = logging.getLogger("adipoinsight.llm")
 
@@ -54,21 +67,45 @@ class LLMService:
         self._json_temperature = LLM_JSON_TEMPERATURE
         self._text_temperature = LLM_TEXT_TEMPERATURE
 
+    # ===== 安全约束 =====
+
+    @staticmethod
+    def _enforce_limits(request: LLMRequest) -> None:
+        """强制安全约束：max_tokens 上限 + 禁止 tool calls。"""
+        task = request.task_type or "unknown"
+
+        # 1. max_tokens 上限（防止 token 耗尽）
+        limit = _MAX_TOKENS_LIMITS.get(task, LLM_MAX_TOKENS)
+        requested = request.max_tokens or LLM_MAX_TOKENS
+        if requested > limit:
+            logger.warning(
+                "LLM max_tokens capped: task=%s requested=%d limit=%d",
+                task, requested, limit,
+            )
+            request.max_tokens = limit
+        elif not request.max_tokens:
+            request.max_tokens = limit
+
+        # 2. 禁止 function calling / tool use
+        # LLMRequest schema 目前不包含 tools/function_call 字段，
+        # 如果将来添加，必须在此处拦截
+
     # ===== 公开方法 =====
 
     def call_llm(self, request: LLMRequest) -> LLMResponse:
         """
         调用 LLM 返回纯文本。
 
+        LLM 输出仅作为展示内容，不会被直接执行。调用前强制执行安全约束。
+
         Args:
             request: LLMRequest（provider 字段可选，默认从配置读取）
 
         Returns:
             LLMResponse
-
-        Raises:
-            LLMError: 所有错误统一转换为 LLMError schema
         """
+        self._enforce_limits(request)
+
         provider_name = request.provider or self._default_provider
         if not provider_registry.has(provider_name):
             available = provider_registry.list_all()
@@ -96,16 +133,20 @@ class LLMService:
         """
         调用 LLM 返回 JSON。
 
-        MockProvider 会根据 taskType 返回对应的结构化 JSON。
-        真实 Provider 会强制 JSON mode + 解析 + 可选 schema validate。
+        强制 schema 校验。LLM 输出仅作为数据使用，不会被直接执行。
+
+        Schema 校验失败时自动 fallback，不抛异常。
 
         Args:
             request: LLMRequest
-            output_schema: 可选的 Pydantic model 用于校验
+            output_schema: 可选的手动指定 Pydantic model，留空则自动解析
 
         Returns:
-            LLMResponse (response.json_data 已填充)
+            LLMResponse (response.json_data 一定可用)
         """
+        self._enforce_limits(request)
+        from backend.app.ai.llm.schema_validator import schema_validator
+
         provider_name = request.provider or self._default_provider
         if not provider_registry.has(provider_name):
             provider_name = provider_registry.get_default().name
@@ -118,24 +159,52 @@ class LLMService:
                 provider_name,
             )
 
+        # 自动解析 schema（如果调用方未显式传入）
+        resolved_schema = output_schema
+        if resolved_schema is None:
+            resolved_schema = schema_validator.get_schema(request.task_type)
+            if resolved_schema is None:
+                logger.warning(
+                    "No schema registered for task_type '%s', proceeding without validation",
+                    request.task_type,
+                )
+
         json_request = request.model_copy(update={"response_format": "json"})
         try:
-            response = provider.chat_json(json_request, output_schema)
+            response = provider.chat_json(json_request, resolved_schema)
             response.provider = provider_name
-            logger.info("LLM JSON success: provider=%s task=%s", provider_name, request.task_type)
         except Exception as exc:
             logger.error("LLM JSON error: %s", exc)
             return self._make_error_response(
                 "LLM_SERVICE_ERROR", f"{type(exc).__name__}: {str(exc)}", provider_name,
             )
 
-        # Schema 校验
-        if output_schema is not None and response.json_data is not None:
-            try:
-                validated = output_schema(**response.json_data)
-                response.json_data = validated.model_dump() if hasattr(validated, 'model_dump') else dict(validated)
-            except Exception as exc:
-                logger.warning("LLM JSON schema validation failed: %s", exc)
+        # 集中式 Schema 校验 + fallback
+        if response.json_data is not None and isinstance(response.json_data, dict):
+            ok, data, errors = schema_validator.validate(
+                request.task_type, response.json_data,
+            )
+            if ok:
+                response.json_data = data
+                logger.info(
+                    "LLM JSON success: provider=%s task=%s schema=validated",
+                    provider_name, request.task_type,
+                )
+            else:
+                # 校验失败 → 使用 fallback，不崩溃
+                response.json_data = data
+                logger.warning(
+                    "SCHEMA_VALIDATION_FAILED: task=%s errors=%s — using fallback",
+                    request.task_type, errors,
+                )
+        elif response.json_data is None:
+            # LLM 没有返回 JSON → 使用 fallback
+            _, data, __ = schema_validator.validate(request.task_type, {})
+            response.json_data = data
+            logger.warning(
+                "SCHEMA_VALIDATION_FAILED: task=%s json_data is None — using fallback",
+                request.task_type,
+            )
 
         return response
 

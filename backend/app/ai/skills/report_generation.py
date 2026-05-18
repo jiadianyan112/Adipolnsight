@@ -10,7 +10,9 @@ Real 模式：LLM 驱动（Claude API / GPT-4），预留接口。
 - related_figures, related_tables（关联图表引用）
 """
 
+import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -19,7 +21,7 @@ from typing import Any, Dict, List
 from backend.app.ai.base import Skill, SkillContext, SkillMode, SkillOutput
 from backend.app.ai.registry import registry
 
-# ===== 章节定义 =====
+# ===== 章节定义（旧版，保留向后兼容；新版模板在 report_templates.py） =====
 
 SECTION_DEFS: List[Dict[str, Any]] = [
     {"key": "background", "title": "项目背景与研究目标"},
@@ -32,122 +34,6 @@ SECTION_DEFS: List[Dict[str, Any]] = [
     {"key": "discussion", "title": "综合讨论与结论"},
     {"key": "limitations", "title": "研究局限性与展望"},
 ]
-
-SECTION_CONTENT_TEMPLATES: Dict[str, str] = {
-    "background": (
-        "## 研究背景\n\n"
-        "肝脏脂肪含量（Liver PDFF）升高与非酒精性脂肪肝病（NAFLD）密切相关，"
-        "近年研究提示 NAFLD 可能通过系统性炎症、胰岛素抵抗及脂肪因子分泌异常等途径影响骨代谢。"
-        "然而，肝脏脂肪积累与骨质疏松之间的因果关系及其分子机制尚不完全明确。\n\n"
-        "## 研究目标\n\n"
-        "1. 量化肝脏 PDFF 与骨密度/骨质疏松风险的关联强度\n"
-        "2. 利用孟德尔随机化方法评估因果关系\n"
-        "3. 识别介导肝脏-骨骼轴的血浆蛋白中介因子\n"
-        "4. 构建基于影像和遗传特征的综合风险预测模型\n\n"
-        "## 研究设计\n\n"
-        "本研究整合腹部 MRI 影像组学（TSSA-UNet 自动分割）、"
-        "UK Biobank 基因组学数据（n≈40,000，EUR）、"
-        "deCODE 血浆蛋白 pQTL 数据（4,907 种蛋白）及 OpenGWAS 公开数据库，"
-        "采用\"影像 → 遗传 → 因果 → 中介 → 临床\"五步分析策略。"
-    ),
-    "segmentation": (
-        "## 方法\n\n"
-        "使用 TSSA-UNet v2.1 深度学习模型对腹部 MRI DIXON 序列进行多器官自动分割。\n\n"
-        "## 分割性能\n\n"
-        "| 解剖结构 | DICE 系数 | 评价 |\n"
-        "|---------|----------|------|\n"
-        "| 肝脏 | 0.949 | 优秀 |\n"
-        "| 胰腺 | 0.843 | 良好 |\n"
-        "| 内脏脂肪 | 0.917 | 优秀 |\n"
-        "| 皮下脂肪 | 0.901 | 优秀 |\n"
-        "| 骨髓 | 0.871 | 良好 |\n\n"
-        "## 质控评估\n\n"
-        "- 综合质量评分: 0.896 | SNR: 26.7 dB | 运动伪影: 未检测到 | 覆盖完整度: 98%\n\n"
-        "胰腺 DICE 处于临界范围（0.843），可能受胰腺边界模糊和个体差异影响。"
-    ),
-    "phenotype": (
-        "## 定量表型提取\n\n"
-        "| 指标 | 数值 | 单位 |\n|------|------|------|\n"
-        "| 肝脏 PDFF | 9.8 | % |\n"
-        "| 内脏脂肪体积 | 3.49 | L |\n"
-        "| 皮下脂肪体积 | 7.62 | L |\n"
-        "| 胰腺脂肪分数 | 11.1 | % |\n"
-        "| 骨髓脂肪分数 | 64.3 | % |\n"
-        "| SAT/VAT 比值 | 2.18 | — |\n"
-        "| 全身脂肪百分比 | 30.4 | % |\n"
-        "| 骨密度 | 1.28 | g/cm³ |\n\n"
-        "肝脏 PDFF 9.8% 提示轻度肝脂肪变性（>5% 为异常阈值）。"
-    ),
-    "gwas": (
-        "## GWAS 设计\n\n"
-        "以肝脏 PDFF 为定量表型，纳入年龄、性别、BMI 及前 10 个遗传主成分"
-        "作为协变量，使用 REGENIE 方法对 40,484 例 EUR 样本进行分析。\n\n"
-        "## 结果摘要\n\n"
-        "- 显著基因座: 18 个 (p < 5×10⁻⁸) | 先导 SNP: 12 个 | λ_GC: 1.003\n\n"
-        "λ_GC 接近 1.0，表明群体分层和隐性关联控制良好，无系统性偏倚。"
-    ),
-    "mr": (
-        "## 双样本孟德尔随机化\n\n"
-        "以 GWAS 显著 SNP 为工具变量，从 OpenGWAS 获取骨质疏松结局汇总统计。\n\n"
-        "| 方法 | nSNP | β | OR | 95% CI | P |\n"
-        "|------|------|---|---|--------|---|\n"
-        "| IVW (Primary) | 12 | 0.383 | 1.47 | [1.21, 1.77] | 1.6×10⁻² |\n"
-        "| MR-Egger | 12 | 0.433 | 1.54 | [1.17, 2.03] | 3.8×10⁻² |\n"
-        "| Weighted Median | 12 | 0.322 | 1.38 | [1.18, 1.62] | 1.5×10⁻¹ |\n"
-        "| Weighted Mode | 12 | 0.316 | 1.37 | [1.13, 1.66] | 6.6×10⁻² |\n\n"
-        "**敏感性分析**: Cochran's Q p=0.124（无异质性）；MR-Egger intercept p=0.592（无多效性）。"
-    ),
-    "mediation_mr": (
-        "## 中介筛选\n\n"
-        "利用 deCODE 4,907 种血浆蛋白 pQTL 数据，两步 MR + Product Method，FDR 校正。\n\n"
-        "| Rank | 蛋白 | 全称 | 间接效应 | 中介比例 | P(FDR) |\n"
-        "|------|------|------|---------|---------|--------|\n"
-        "| 1 | POR | P450 reductase | +0.0605 | 13.7% | 3.5×10⁻⁴ |\n"
-        "| 2 | NAAA | Acid amidase | +0.0359 | 8.2% | 2.0×10⁻⁴ |\n"
-        "| 3 | SHBG | Hormone-binding globulin | +0.0230 | 5.2% | 0.088 |\n"
-        "| 4 | H6PD | Hexose-6-P dehydrogenase | +0.0157 | 3.6% | 0.221 |\n"
-        "| 5 | ACY1 | Aminoacylase-1 | +0.0124 | 2.8% | 0.282 |\n"
-        "| 6 | ADH1A | Alcohol dehydrogenase | −0.0013 | 0.3% | 0.917 |\n\n"
-        "POR 和 NAAA 达到 FDR<0.05 显著性。"
-    ),
-    "risk_modeling": (
-        "## 风险建模\n\n"
-        "多因素模型：OLS + RCS + Multinomial Logistic。\n\n"
-        "| 四分位 | PDFF 范围 | Osteoporosis OR |\n"
-        "|--------|----------|----------------|\n"
-        "| Q1 | < 5.2% | 1.00 (ref) |\n"
-        "| Q2 | 5.2–8.1% | 1.26 |\n"
-        "| Q3 | 8.1–12.8% | 1.50 |\n"
-        "| Q4 | 12.8–35.0% | 1.59 |\n\n"
-        "Q4 骨质疏松风险是 Q1 的 1.59 倍（95%CI 1.36–1.89, p_trend<0.001）。"
-        "RCS 提示 PDFF>10% 后风险趋于平台，建议以此作为临床筛查阈值。"
-    ),
-    "discussion": (
-        "## 主要发现\n\n"
-        "1. 肝脏 PDFF 与骨质疏松风险独立正相关（Q4 vs Q1 OR=1.59）\n"
-        "2. MR 支持因果推断（IVW β=0.38, p<0.001）\n"
-        "3. POR 和 NAAA 为关键分子中介（分别介导 13.7% 和 8.2%）\n"
-        "4. PDFF>10% 后骨质疏松风险趋于平台\n\n"
-        "## 临床意义\n\n"
-        "- 肝脏 PDFF 可作为骨质疏松风险评估的影像生物标志物\n"
-        "- PDFF=10% 建议作为骨密度筛查的触发阈值\n"
-        "- POR 和 NAAA 可作为 NAFLD 相关骨病的新型治疗靶点"
-    ),
-    "limitations": (
-        "## 研究局限性\n\n"
-        "1. **数据来源**: 使用 Mock 模拟数据，不反映真实生物学发现\n"
-        "2. **人群限制**: GWAS 限于 EUR 人群，泛化性待验证\n"
-        "3. **中介方法**: cis-pQTL 可能遗漏 trans 效应\n"
-        "4. **测量偏差**: PDFF 由自动化分割估计，与 MR 波谱金标准有偏差\n"
-        "5. **横断面设计**: 无法确定因果时序\n"
-        "6. **未测量混杂**: 药物使用和生活方式未纳入\n"
-        "7. **报告生成**: 由 Mock Generator 生成，后续接入 LLM\n\n"
-        "## 未来方向\n\n"
-        "- 独立队列验证（如 China Kadoorie Biobank）\n"
-        "- 细胞/动物实验验证 POR/NAAA 机制\n"
-        "- 开发 PDFF+PRS 综合骨折风险预测工具"
-    ),
-}
 
 
 class ReportGenerationSkill(Skill):
@@ -188,71 +74,184 @@ class ReportGenerationSkill(Skill):
         }
 
     def run(self, input_data: Dict[str, Any], context: SkillContext) -> SkillOutput:
-        if self.mode == "mock":
-            return self._run_mock(input_data, context)
-        else:
-            return self._run_real(input_data, context)
+        """执行报告生成。优先尝试 LLM，失败回退模板。"""
+        # 先尝试 LLM 路径
+        llm_output = self._try_llm(input_data, context)
+        if llm_output is not None:
+            return llm_output
 
-    def _run_mock(self, input_data: Dict[str, Any], context: SkillContext) -> SkillOutput:
-        time.sleep(0.3)
-        project_id = input_data["project_id"]
-        report_type = input_data.get("report_type", "full")
-        language = input_data.get("language", "zh-CN")
-        completed_results = input_data.get("completed_job_results") or {}
-        include_figures = input_data.get("include_figures", True)
-        include_tables = input_data.get("include_tables", True)
+        # Fallback 到模板
+        return self._run_mock(input_data, context)
+
+    # ===== LLM 路径 =====
+
+    def _try_llm(self, input_data: Dict[str, Any], context: SkillContext) -> SkillOutput | None:
+        """尝试通过 LLM 生成报告。不可用或失败返回 None。
+
+        使用 text 模式调用（非 JSON mode），自行解析 JSON，
+        以避免 DeepSeek 返回 markdown-wrapped JSON 时解析失败。
+        """
+        try:
+            from backend.app.config import LLM_PROVIDER
+            from backend.app.ai.llm import provider_registry
+
+            if LLM_PROVIDER != "deepseek":
+                return None
+            if not provider_registry.has("deepseek"):
+                return None
+
+            completed_results = input_data.get("completed_job_results") or {}
+            if not isinstance(completed_results, dict):
+                completed_results = {}
+
+            project_id = input_data.get("project_id", 0)
+            project_title = input_data.get("project_title") or "AdipoInsight 科研分析报告"
+            language = input_data.get("language", "zh-CN")
+
+            valid_results = {
+                jid: res for jid, res in completed_results.items()
+                if isinstance(res, dict) and res
+            }
+
+            from backend.app.ai.llm.service import llm_service
+            from backend.app.ai.llm.prompts.report_generation import (
+                SYSTEM_PROMPT,
+                build_user_prompt,
+            )
+            from backend.app.schemas.llm import LLMRequest, LLMMessage
+
+            user_msg = build_user_prompt(project_title, valid_results, language)
+
+            request = LLMRequest(
+                messages=[
+                    LLMMessage(role="system", content=SYSTEM_PROMPT),
+                    LLMMessage(role="user", content=user_msg),
+                ],
+                taskType="report_generation",
+                temperature=0.3,
+                maxTokens=8192,
+            )
+
+            # 使用 text 模式调用，避免 JSON mode 的 markdown fence 问题
+            response = llm_service.call_llm(request)
+
+            content = response.content or ""
+            if not content.strip():
+                return None
+
+            # 手动提取 JSON（健壮的 markdown fence 剥离）
+            llm_data = self._extract_json(content)
+            if llm_data is None:
+                return None
+
+            # Schema 校验
+            ok, data, errors = self._validate_report(llm_data)
+            if not ok:
+                return None
+
+            return self._build_full_output(
+                data, project_id, project_title, language, list(valid_results.keys()),
+            )
+
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_json(text: str) -> dict | None:
+        """从 LLM 文本响应中提取 JSON，处理各种 markdown fence 格式。"""
+        text = text.strip()
+
+        # 尝试 1：匹配 ```json ... ``` 或 ``` ... ``` 代码块
+        m = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1).strip())
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 尝试 2：查找第一个 { 和最后一个 } 之间的内容
+        start = text.find('{')
+        end = text.rfind('}')
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 尝试 3：直接解析
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        return None
+
+    @staticmethod
+    def _validate_report(data: dict):
+        """校验报告 JSON 结构。返回 (ok, validated_data, errors)。"""
+        from backend.app.ai.llm.schema_validator import schema_validator
+        return schema_validator.validate("report_generation", data)
+
+    def _build_full_output(
+        self,
+        llm_data: dict,
+        project_id: int,
+        project_title: str,
+        language: str,
+        job_ids: list,
+    ) -> SkillOutput:
+        """将 LLM JSON 输出转换为前端兼容的完整报告格式。"""
+        import uuid as _uuid
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        report_id = f"rpt_{uuid.uuid4().hex[:8]}"
-        project_title = input_data.get("project_title") or "AdipoInsight 科研分析报告"
-        subtitle = "肝脏 PDFF 与骨质疏松因果关系 — 多组学整合分析"
+        report_id = f"rpt_{_uuid.uuid4().hex[:8]}"
 
-        # 已完成 job IDs
-        job_ids = list(completed_results.keys()) if completed_results else [
-            "mock_seg", "mock_gwas", "mock_mr", "mock_medmr", "mock_risk",
+        llm_sections = llm_data.get("sections", [])
+        limitations = llm_data.get("limitations", [])
+        next_steps = llm_data.get("nextSteps", llm_data.get("next_steps", []))
+
+        # 转换为前端 ReportSection 格式
+        sections = []
+        for i, sec in enumerate(llm_sections):
+            sections.append({
+                "number": i + 1,
+                "title": sec.get("title", f"章节 {i+1}"),
+                "content": sec.get("content", ""),
+                "status": "complete",
+                "summary": "",
+                "evidence_job_ids": sec.get("evidenceJobIds", sec.get("evidence_job_ids", [])),
+                "related_figures": sec.get("relatedFigures", sec.get("related_figures", [])),
+                "related_tables": sec.get("relatedTables", sec.get("related_tables", [])),
+            })
+
+        # 如果 LLM 返回了 nextSteps，追加到 limitations
+        if next_steps:
+            limitations = limitations + [f"建议后续步骤: {', '.join(next_steps[:5])}"]
+
+        # 添加 AI 生成声明
+        limitations = limitations + [
+            "[AI-Generated] 本报告由 DeepSeek LLM 自动生成，数据来源为已完成的分析结果。仅供科研参考，不构成临床决策依据。",
         ]
 
-        sections = self._build_sections(job_ids, report_type, include_figures, include_tables)
-        figures = self._build_figures() if include_figures else []
-        tables = self._build_tables() if include_tables else []
-        references = self._build_references()
-
-        key_findings = [
-            "肝脏 PDFF 与骨质疏松风险呈显著正相关（Q4 vs Q1: OR=1.59）",
-            "双样本 MR 支持因果推断（IVW β=0.38, 95%CI 0.22–0.55, p<0.001）",
-            "POR 和 NAAA 为显著中介血浆蛋白（FDR<0.05），分别介导 13.7% 和 8.2% 的总效应",
-            "RCS 曲线提示 PDFF>10% 后骨质疏松风险趋于平台",
-            "MR-Egger intercept p=0.59 排除显著水平多效性",
-        ]
-        limitations = [
-            "本研究使用 Mock 模拟数据，结果不反映真实生物学发现，不可用于临床决策",
-            "GWAS 样本限于 EUR 人群，跨人群泛化性待独立队列验证",
-            "中介分析仅覆盖 cis-pQTL，可能低估总中介效应",
-            "PDFF 由自动化分割估计，与 MR 波谱金标准存在偏差",
-            "横断面设计无法确定因果时序",
-            "未评估药物使用和生活方式对结局的混杂影响",
-        ]
         export_formats = [
             {"format": "markdown", "label": "Markdown", "available": True,
              "url": f"/api/v1/files/reports/{report_id}.md", "file_size": 52000},
-            {"format": "pdf", "label": "PDF", "available": False, "url": "", "file_size": 0},
-            {"format": "docx", "label": "Word", "available": False, "url": "", "file_size": 0},
-            {"format": "html", "label": "HTML", "available": True,
-             "url": f"/api/v1/files/reports/{report_id}.html", "file_size": 58000},
-            {"format": "latex", "label": "LaTeX", "available": False, "url": "", "file_size": 0},
         ]
+
         metadata = {
-            "version": "1.0.0-mock", "generated_at": now, "generation_time_seconds": 1.2,
-            "ai_model": "Mock Report Generator (LLM-ready)",
-            "data_sources": ["mock_segmentation", "mock_gwas", "mock_mr", "mock_mediation_mr", "mock_risk_modeling"],
-            "analysis_methods": ["TSSA-UNet v2.1", "REGENIE", "TwoSampleMR", "Product Method + Sobel", "OLS + RCS + Logistic"],
-            "conflict_of_interest": "本研究由 AdipoInsight AI 系统自动生成，仅供演示。",
-            "acknowledgments": "感谢 UK Biobank、deCODE genetics、OpenGWAS 及 IEU MR-Base 数据库。",
+            "version": "2.0.0-llm",
+            "generated_at": now,
+            "generation_time_seconds": 0,
+            "ai_model": "DeepSeek (via AdipoInsight LLM Service)",
+            "data_sources": job_ids,
+            "analysis_methods": [],
+            "conflict_of_interest": "本研究由 AdipoInsight AI 系统自动生成。",
+            "acknowledgments": "",
         }
 
-        content_md = self._build_full_markdown(
-            project_title, subtitle, sections, figures, tables,
-            references, limitations, key_findings, language,
+        # 构建 markdown
+        content_md = self._build_markdown_from_sections(
+            llm_data.get("title", project_title), sections, limitations, language,
         )
 
         out_dir = context.output_dir
@@ -260,24 +259,89 @@ class ReportGenerationSkill(Skill):
         with open(os.path.join(out_dir, "final_report.md"), "w", encoding="utf-8") as f:
             f.write(content_md)
 
-        summary = {
-            "report_id": report_id, "project_id": project_id,
-            "title": project_title, "subtitle": subtitle,
-            "report_type": report_type, "language": language,
-            "sections": sections, "figures": figures, "tables": tables,
-            "references": references, "limitations": limitations,
-            "key_findings": key_findings, "export_formats": export_formats,
-            "metadata": metadata, "content_markdown": content_md[:8000],
-            "completed_sections": len([s for s in sections if s["status"] == "complete"]),
-            "total_sections": len(sections),
-            "ai_interpretation": self._build_ai_interpretation(),
-            "output_files": ["final_report.md"],
-        }
+        completed_count = len([s for s in sections if s["status"] == "complete"])
 
         return SkillOutput(
-            status="success", summary=summary,
+            status="success",
+            summary={
+                "report_id": report_id,
+                "project_id": project_id,
+                "title": llm_data.get("title", project_title),
+                "subtitle": "",
+                "report_type": "full",
+                "language": language,
+                "sections": sections,
+                "figures": [],
+                "tables": [],
+                "references": [],
+                "limitations": limitations,
+                "key_findings": [],
+                "export_formats": export_formats,
+                "metadata": metadata,
+                "content_markdown": content_md[:8000],
+                "completed_sections": completed_count,
+                "total_sections": len(sections),
+                "ai_interpretation": "[AI-Generated via DeepSeek]",
+                "output_files": ["final_report.md"],
+            },
             output_files=["final_report.md"],
-            metrics={"completed_sections": summary["completed_sections"]},
+            metrics={"completed_sections": completed_count},
+        )
+
+    def _build_markdown_from_sections(
+        self, title: str, sections: list, limitations: list, language: str,
+    ) -> str:
+        """将 LLM 生成的 sections 拼接为完整 markdown。"""
+        lines = [f"# {title}", "", f"**生成时间**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", "", "---", ""]
+        for sec in sections:
+            lines.append(f"## {sec['title']}")
+            lines.append(sec.get("content", ""))
+            lines.append("")
+        if limitations:
+            lines.append("## 研究局限性")
+            for lim in limitations:
+                lines.append(f"- {lim}")
+            lines.append("")
+        return "\n".join(lines)
+
+    # ===== Mock 路径（模板 fallback） =====
+
+    def _run_mock(self, input_data: Dict[str, Any], context: SkillContext) -> SkillOutput:
+        """使用新模板系统生成报告（基于 selectedJobs 动态生成章节）。"""
+        time.sleep(0.3)
+        project_id = input_data.get("project_id", 0)
+        report_type = input_data.get("report_type", "full_report")
+        language = input_data.get("language", "zh-CN")
+        project_title = input_data.get("project_title") or "AdipoInsight 科研分析报告"
+        selected_jobs = input_data.get("completed_job_results") or input_data.get("selectedJobs") or {}
+
+        if not isinstance(selected_jobs, dict):
+            selected_jobs = {}
+
+        # 调用新模板引擎
+        from backend.app.ai.skills.report_templates import build_report
+
+        report = build_report(
+            selected_jobs=selected_jobs,
+            report_type=report_type,
+            project_title=project_title,
+            language=language,
+            include_figures=input_data.get("include_figures", True),
+            include_tables=input_data.get("include_tables", True),
+        )
+        report["project_id"] = project_id
+
+        # 写出 markdown
+        out_dir = context.output_dir
+        os.makedirs(out_dir, exist_ok=True)
+        with open(os.path.join(out_dir, "final_report.md"), "w", encoding="utf-8") as f:
+            f.write(report.get("content_markdown", ""))
+
+        return SkillOutput(
+            status="success",
+            summary=report,
+            output_files=["final_report.md"],
+            metrics={"completed_sections": report["completed_sections"]},
         )
 
     # ==== 章节构建 ====
@@ -483,13 +547,5 @@ class ReportGenerationSkill(Skill):
             for ref in references: lines.append(f"{ref['number']}. {ref['text']}")
             lines.append("")
         return "\n".join(lines)
-
-    def _run_real(self, input_data: Dict[str, Any], context: SkillContext) -> SkillOutput:
-        return SkillOutput(
-            status="failed",
-            error_code="NOT_IMPLEMENTED",
-            error_message="LLM-based report generation not yet integrated. Switch mode to 'mock'.",
-        )
-
 
 registry.register(ReportGenerationSkill())

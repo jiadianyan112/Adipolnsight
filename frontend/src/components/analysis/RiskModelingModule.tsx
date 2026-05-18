@@ -6,6 +6,7 @@ import DashboardCard from '../shared/DashboardCard';
 import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
 import PrimaryButton from '../shared/PrimaryButton';
+import AIInterpretationPanel from '../result/AIInterpretationPanel';
 
 // ===== Types =====
 
@@ -208,6 +209,15 @@ export default function RiskModelingModule({ riskTask, projectId, exposureName, 
             </div>
           </div>
         </DashboardCard>
+      )}
+
+      {/* ===== AI Interpretation ===== */}
+      {result && projectId && (
+        <AIInterpretationPanel
+          jobType="risk_modeling"
+          resultData={result as unknown as Record<string, unknown>}
+          projectId={projectId}
+        />
       )}
     </div>
   );

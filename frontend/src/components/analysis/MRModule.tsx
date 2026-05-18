@@ -7,6 +7,7 @@ import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
 import SecondaryButton from '../shared/SecondaryButton';
 import PrimaryButton from '../shared/PrimaryButton';
+import AIInterpretationPanel from '../result/AIInterpretationPanel';
 import { Scatter, XAxis, YAxis, ResponsiveContainer, Line, ComposedChart, Cell } from 'recharts';
 
 // ===== Props =====
@@ -382,6 +383,16 @@ export default function MRModule({ mrTask, projectId, exposureName, outcomeName,
             </div>
           </DashboardCard>
         </div>
+      )}
+
+      {/* ===== AI Interpretation ===== */}
+      {result && projectId && (
+        <AIInterpretationPanel
+          jobType="mr"
+          resultData={result as unknown as Record<string, unknown>}
+          projectId={projectId}
+          sourceJobId={jobId || undefined}
+        />
       )}
     </div>
   );

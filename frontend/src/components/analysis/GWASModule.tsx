@@ -7,6 +7,7 @@ import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
 import SecondaryButton from '../shared/SecondaryButton';
 import PrimaryButton from '../shared/PrimaryButton';
+import AIInterpretationPanel from '../result/AIInterpretationPanel';
 import { ScatterChart, Scatter, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts';
 
 // ===== Props =====
@@ -328,6 +329,16 @@ export default function GWASModule({ gwasTask, opengwasTask, projectId, phenotyp
             </table>
           </div>
         </DashboardCard>
+      )}
+
+      {/* ===== AI Interpretation ===== */}
+      {result && projectId && (
+        <AIInterpretationPanel
+          jobType="gwas"
+          resultData={result as unknown as Record<string, unknown>}
+          projectId={projectId}
+          sourceJobId={jobId || undefined}
+        />
       )}
     </div>
   );

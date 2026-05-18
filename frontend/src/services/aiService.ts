@@ -639,6 +639,12 @@ export interface AIJobFromAPI {
   output_files: string[];
   error_code: string;
   error_message: string;
+  user_facing_error?: {
+    user_message: string;
+    possible_reasons: string[];
+    next_actions: string[];
+    technical_summary: string;
+  } | null;
   created_at: string;
   started_at: string;
   finished_at: string;
@@ -946,4 +952,53 @@ export async function agentQuery(
     }
     return res.data.data;
   }, 'AI Agent 请求失败');
+}
+
+// ===== AI Chat 接口 =====
+
+export interface ChatRequest {
+  message: string;
+  project_id?: number;
+  context?: Record<string, unknown>;
+}
+
+export interface ChatAction {
+  label: string;
+  action: string;
+  params: Record<string, unknown>;
+}
+
+export interface ChatResponse {
+  type: 'answer' | 'job_created' | 'need_more_info' | 'job_status' | 'error';
+  message: string;
+  jobId?: string;
+  capabilityType?: string;
+  actions?: ChatAction[];
+  suggestedInputs?: Array<{
+    field: string;
+    label: string;
+    suggested_value: unknown;
+    type: string;
+    options?: unknown[];
+    hint?: string;
+  }>;
+  blockedFields?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * AI 聊天助手
+ *
+ * POST /api/ai/chat
+ */
+export async function chatQuery(
+  payload: ChatRequest,
+): Promise<AIServiceResult<ChatResponse>> {
+  return withErrorBoundary(async () => {
+    const res = await api.post<AIApiEnvelope<ChatResponse>>('/ai/chat', payload);
+    if (!res.data.success) {
+      throw new Error(res.data.error?.message || 'Chat query failed');
+    }
+    return res.data.data;
+  }, 'AI Chat 请求失败');
 }

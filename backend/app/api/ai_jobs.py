@@ -211,7 +211,10 @@ def get_ai_job_result(
             error=ApiError(
                 code=job.error_code or "SKILL_EXECUTION_ERROR",
                 message=job.error_message or "Job execution failed",
-                details={"job_id": job_id},
+                details={
+                    "job_id": job_id,
+                    "user_facing_error": job.user_facing_error,
+                },
             ),
         )
 
@@ -370,6 +373,8 @@ def agent_query(body: AgentQueryRequest):
             "extracted_params": result.extracted_params,
             "missing_params": result.missing_params,
             "clarification_question": result.clarification_question,
+            "suggested_inputs": result.suggested_inputs,
+            "blocked_fields": result.blocked_fields,
             "intent_confidence": result.intent_confidence,
             "next_actions": [
                 {"label": a.label, "action": a.action, "params": a.params}
@@ -460,3 +465,192 @@ def llm_health_check():
             "error": f"{type(exc).__name__}: {str(exc)}",
             "latency_ms": 0,
         })
+
+
+# =====================================================================
+# POST /api/ai/chat — AI 聊天助手
+# =====================================================================
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000, description="用户消息")
+    context: DictType[str, Any] = Field(default_factory=dict, description="页面上下文")
+    project_id: int = Field(default=0, ge=0, description="当前项目 ID")
+
+
+@router.post("/chat")
+def chat(body: ChatRequest):
+    """
+    AI 聊天助手 —— 统一对话入口。
+
+    路由逻辑：
+    - 任务型请求 → AgentOrchestrator 创建 job
+    - 结果解释   → 创建 resultInterpretation job
+    - 任务状态   → 查询 JobManager
+    - 普通问答   → 调用 LLM Service (chat)
+    - 无法识别   → need_more_info + 能力列表
+    """
+    from backend.app.ai.llm.hybrid_intent_parser import hybrid_intent_parser
+    from backend.app.ai.agent_orchestrator import agent_orchestrator
+    from backend.app.ai.job_manager import job_manager as jm
+    from backend.app.ai.registry import registry as skill_registry
+
+    msg = body.message.strip()
+    ctx = body.context or {}
+    project_id = body.project_id or ctx.get("project_id", 0)
+
+    logger.info("[AI Chat] message=%s project=%s", msg[:80], project_id)
+
+    intent_result = hybrid_intent_parser.parse(msg)
+    task_intents = {"segmentation", "gwas", "mr", "mediation_mr", "risk_modeling", "report", "phenotype"}
+
+    # --- 任务型请求 → AgentOrchestrator ---
+    if intent_result.intent in task_intents:
+        orch_ctx = {**ctx}
+        if project_id:
+            orch_ctx["project_id"] = project_id
+        orch_ctx.update(intent_result.extracted_params)
+
+        orch_result = agent_orchestrator.process(query=msg, context=orch_ctx, auto_run=True)
+
+        return _make_response(success=True, data={
+            "type": orch_result.answer_type,
+            "message": orch_result.message,
+            "jobId": orch_result.job_id,
+            "capabilityType": orch_result.capability_type,
+            "actions": [{"label": a.label, "action": a.action, "params": a.params} for a in orch_result.next_actions],
+            "suggestedInputs": orch_result.suggested_inputs,
+            "blockedFields": orch_result.blocked_fields,
+            "metadata": {"intent": intent_result.intent, "confidence": orch_result.intent_confidence, "source": intent_result.source},
+        })
+
+    # --- 结果解释请求 ---
+    if intent_result.intent == "result_interpretation":
+        selected_result = ctx.get("selectedResult", {})
+        selected_job_id = ctx.get("selectedJobId") or intent_result.extracted_params.get("job_id", "")
+
+        if isinstance(selected_result, dict) and selected_result and selected_job_id:
+            try:
+                job = jm.create_job(
+                    capability_type="result_interpretation",
+                    input_data={
+                        "sourceJobId": str(selected_job_id),
+                        "jobType": selected_result.get("capability_type", "unknown"),
+                        "jobResult": selected_result,
+                        "audience": "researcher",
+                        "language": "zh",
+                        "project_id": project_id,
+                    },
+                    project_id=project_id,
+                )
+                jm.run_job(job.job_id)
+                return _make_response(success=True, data={
+                    "type": "job_created",
+                    "message": f"已创建 AI 解读任务 (job: {job.job_id})，正在分析中",
+                    "jobId": job.job_id,
+                    "actions": [{"label": "查看解读", "action": "view_result", "params": {"job_id": job.job_id}}],
+                    "metadata": {"intent": "result_interpretation", "source": intent_result.source},
+                })
+            except Exception as exc:
+                logger.error("Failed to create interpretation job: %s", exc)
+
+        return _make_response(success=True, data={
+            "type": "need_more_info",
+            "message": "请先在结果页面点击「AI 解读」按钮，或告诉我具体要解释哪个分析结果。",
+            "actions": [{"label": "查看可用能力", "action": "view_capabilities"}],
+            "metadata": {"intent": "result_interpretation"},
+        })
+
+    # --- 任务状态查询 ---
+    if intent_result.intent == "job_status":
+        job_id = intent_result.extracted_params.get("job_id", "") or ctx.get("selectedJobId", "")
+        recent_jobs = ctx.get("recentJobs", [])
+
+        if job_id:
+            job_status = jm.get_job_status(str(job_id))
+            if job_status:
+                return _make_response(success=True, data={
+                    "type": "job_status",
+                    "message": f"任务 {job_id}: {job_status['status']} ({job_status['progress']}%)",
+                    "jobId": str(job_id),
+                    "actions": [{"label": "查看详情", "action": "view_result", "params": {"job_id": str(job_id)}}],
+                    "metadata": {"jobStatus": job_status},
+                })
+
+        if recent_jobs:
+            lines = ["最近任务:"]
+            for j in recent_jobs[:5]:
+                jid = j.get("job_id", j.get("id", "?"))
+                lines.append(f"  · {jid} [{j.get('capability_type', j.get('task_type', '?'))}]: {j.get('status', '?')}")
+            msg_text = "\n".join(lines)
+        else:
+            msg_text = "当前没有运行中的任务。您可以开始一个新的分析。"
+
+        return _make_response(success=True, data={
+            "type": "job_status",
+            "message": msg_text,
+            "actions": [
+                {"label": "查看所有任务", "action": "list_jobs"},
+                {"label": "运行新分析", "action": "view_capabilities"},
+            ],
+        })
+
+    # --- 普通问答 → LLM ---
+    if intent_result.intent == "chat":
+        reply = _chat_llm(msg, ctx, project_id)
+        return _make_response(success=True, data={
+            "type": "answer",
+            "message": reply,
+            "actions": [
+                {"label": "做 GWAS", "action": "run_gwas"},
+                {"label": "做 MR", "action": "run_mr"},
+                {"label": "生成报告", "action": "generate_report"},
+            ],
+            "metadata": {"intent": "chat", "source": intent_result.source},
+        })
+
+    # --- 无法识别 ---
+    caps = skill_registry.list_all()
+    return _make_response(success=True, data={
+        "type": "need_more_info",
+        "message": intent_result.user_message or "抱歉，我没有理解您的意图。请尝试更具体的描述。",
+        "actions": [
+            {"label": c["name"], "action": "run_capability", "params": {"capability": c["capability_type"]}}
+            for c in caps[:5]
+        ] + [{"label": "查看所有能力", "action": "view_capabilities"}],
+        "metadata": {"intent": intent_result.intent, "confidence": intent_result.confidence},
+    })
+
+
+def _chat_llm(message: str, context: dict, project_id: int) -> str:
+    """调用 LLM Service 进行对话（text 模式）。失败返回静态 fallback。"""
+    try:
+        from backend.app.ai.llm.service import llm_service
+        from backend.app.ai.llm.prompts.chat import SYSTEM_PROMPT, build_user_prompt
+        from backend.app.schemas.llm import LLMRequest, LLMMessage
+
+        project_ctx = {"project_id": project_id}
+        if context.get("recentJobs"):
+            project_ctx["recent_jobs"] = context["recentJobs"][:5]
+
+        user_msg = build_user_prompt(message, project_ctx)
+
+        request = LLMRequest(
+            messages=[
+                LLMMessage(role="system", content=SYSTEM_PROMPT),
+                LLMMessage(role="user", content=user_msg),
+            ],
+            taskType="chat",
+            temperature=0.5,
+        )
+
+        # 使用 text 模式——聊天回复可能是自然语言非 JSON
+        response = llm_service.call_llm(request)
+        content = (response.content or "").strip()
+        if content and not content.startswith("[LLM Error]"):
+            return content
+
+        return "抱歉，AI 助手暂时无法回复。请稍后重试。"
+
+    except Exception as exc:
+        logger.warning("Chat LLM call failed: %s", exc)
+        return "抱歉，AI 助手暂时遇到技术问题。您可以尝试「做 GWAS」「查看任务进度」或「生成报告」。"

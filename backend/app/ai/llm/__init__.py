@@ -22,6 +22,20 @@ from backend.app.ai.llm.deepseek_provider import DeepSeekProvider
 from backend.app.ai.llm.service import LLMService, llm_service
 from backend.app.ai.llm.deepseek_intent_parser import LLMIntentParser, llm_intent_parser
 from backend.app.ai.llm.hybrid_intent_parser import HybridIntentParser, hybrid_intent_parser
+from backend.app.ai.llm.schema_validator import LLMSchemaValidator, schema_validator
+from backend.app.ai.llm.parameter_completer import (
+    ParameterCompletionService,
+    ParameterCompletionInput,
+    ParameterCompletionOutput,
+    SuggestedInput,
+    parameter_completer,
+)
+from backend.app.ai.llm.error_explainer import (
+    ErrorExplanationService,
+    ErrorExplanationInput,
+    ErrorExplanationOutput,
+    error_explainer,
+)
 
 # 自动注册 DeepSeekProvider（如果 API KEY 未设置则静默跳过）
 try:
@@ -41,4 +55,15 @@ __all__ = [
     "llm_intent_parser",
     "HybridIntentParser",
     "hybrid_intent_parser",
+    "LLMSchemaValidator",
+    "schema_validator",
+    "ParameterCompletionService",
+    "ParameterCompletionInput",
+    "ParameterCompletionOutput",
+    "SuggestedInput",
+    "parameter_completer",
+    "ErrorExplanationService",
+    "ErrorExplanationInput",
+    "ErrorExplanationOutput",
+    "error_explainer",
 ]

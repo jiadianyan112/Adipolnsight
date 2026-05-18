@@ -14,6 +14,7 @@ from backend.app.ai.skills.two_sample_mr import TwoSampleMRSkill
 from backend.app.ai.skills.mediation_mr import MediationMRSkill
 from backend.app.ai.skills.risk_modeling import RiskModelingSkill
 from backend.app.ai.skills.report_generation import ReportGenerationSkill
+from backend.app.ai.skills.result_interpretation import ResultInterpretationSkill
 
 __all__ = [
     "ImageSegmentationSkill",
@@ -23,4 +24,5 @@ __all__ = [
     "MediationMRSkill",
     "RiskModelingSkill",
     "ReportGenerationSkill",
+    "ResultInterpretationSkill",
 ]

@@ -9,6 +9,7 @@ import MetricSummaryCard from '../shared/MetricSummaryCard';
 import PrimaryButton from '../shared/PrimaryButton';
 import SecondaryButton from '../shared/SecondaryButton';
 import StatusBadge from '../shared/StatusBadge';
+import AIInterpretationPanel from '../result/AIInterpretationPanel';
 
 interface Props {
   imageTask?: AnalysisTask;
@@ -572,6 +573,15 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
             查看历史分割结果
           </SecondaryButton>
         )}
+
+      {/* ===== AI Interpretation ===== */}
+      {segResult && projectId && (
+        <AIInterpretationPanel
+          jobType="segmentation"
+          resultData={segResult as unknown as Record<string, unknown>}
+          projectId={projectId}
+        />
+      )}
       </div>
     </DashboardCard>
   );

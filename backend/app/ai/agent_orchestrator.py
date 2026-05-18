@@ -64,6 +64,8 @@ class OrchestratorResult:
     extracted_params: Dict[str, Any] = field(default_factory=dict)
     missing_params: List[str] = field(default_factory=list)
     clarification_question: str = ""         # need_more_info 时的追问
+    suggested_inputs: List[Dict[str, Any]] = field(default_factory=list)  # 前端表单建议
+    blocked_fields: List[str] = field(default_factory=list)               # 禁止 LLM 编造的字段
     next_actions: List[NextAction] = field(default_factory=list)
     intent_confidence: float = 0.0
     raw_query: str = ""
@@ -131,6 +133,16 @@ PARAM_HINTS: Dict[str, Dict[str, Any]] = {
             "title": "报告标题（可选）",
             "language": "zh-CN（默认）/ en",
             "sections": "指定包含的章节（可选）",
+        },
+    },
+    "result_interpretation": {
+        "required": ["project_id", "sourceJobId", "jobType", "jobResult"],
+        "hints": {
+            "sourceJobId": "已完成的分析任务 ID",
+            "jobType": "segmentation | gwas | mr | mediation_mr | risk_modeling",
+            "jobResult": "源任务的分析结果 summary JSON",
+            "audience": "researcher / clinician / judge / general",
+            "language": "zh / en",
         },
     },
 }
@@ -364,20 +376,59 @@ class AgentOrchestrator:
         missing: List[str],
         query: str,
     ) -> OrchestratorResult:
-        """构建「需要补充信息」响应"""
-        hints = PARAM_HINTS.get(cap_type, {}).get("hints", {})
-        hint_texts = [f"• {p}: {hints.get(p, '请提供此参数')}" for p in missing]
+        """构建「需要补充信息」响应，通过 parameterCompletionService 生成智能建议"""
+        # 调用参数补全服务
+        try:
+            from backend.app.ai.llm.parameter_completer import (
+                parameter_completer,
+                ParameterCompletionInput,
+            )
+
+            completion = parameter_completer.complete(ParameterCompletionInput(
+                intent=intent_result.intent,
+                capability_type=cap_type,
+                extracted_params={k: v for k, v in enriched.items() if k not in missing},
+                missing_params=missing,
+                current_context=enriched,
+            ))
+
+            suggested_inputs = [
+                {
+                    "field": s.field,
+                    "label": s.label,
+                    "suggested_value": s.suggested_value,
+                    "type": s.field_type,
+                    "options": s.options,
+                    "hint": s.hint,
+                }
+                for s in completion.suggested_inputs
+            ]
+            blocked = completion.blocked_fields
+            msg = completion.message
+            question = f"请补充：{', '.join(missing)}"
+
+        except Exception as exc:
+            logger.warning("Parameter completer failed, using static hints: %s", exc)
+            # Fallback 到原有静态 hints
+            hints = PARAM_HINTS.get(cap_type, {}).get("hints", {})
+            hint_texts = [f"• {p}: {hints.get(p, '请提供此参数')}" for p in missing]
+            msg = (
+                f"已识别您想要执行「{cap_type}」分析，"
+                f"但缺少以下信息：\n" + "\n".join(hint_texts)
+            )
+            suggested_inputs = []
+            blocked = []
+            question = f"请补充：{', '.join(missing)}"
 
         return OrchestratorResult(
             answer_type="need_more_info",
-            message=(
-                f"已识别您想要执行「{cap_type}」分析，"
-                f"但缺少以下信息：\n" + "\n".join(hint_texts)
-            ),
+            message=msg,
             capability_type=cap_type,
             extracted_params=enriched,
             missing_params=missing,
-            clarification_question=f"请补充：{', '.join(missing)}",
+            clarification_question=question,
+            suggested_inputs=suggested_inputs,
+            blocked_fields=blocked,
             next_actions=[
                 NextAction(f"提供 {p}", "provide_param", {"param": p})
                 for p in missing

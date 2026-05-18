@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import type { AgentQueryResponse, AgentNextAction } from '../../services/aiService';
-import { agentQuery } from '../../services/aiService';
-import { getAIJobStatus } from '../../services/aiService';
+import type { ChatResponse } from '../../services/aiService';
+import { chatQuery, getAIJobStatus } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
-import StatusBadge from '../shared/StatusBadge';
 
 // ===== Props =====
 
@@ -19,7 +17,7 @@ interface Props {
 export default function ChatInput({ projectId, context, className = '' }: Props) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AgentQueryResponse | null>(null);
+  const [result, setResult] = useState<ChatResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState(0);
 
@@ -29,21 +27,21 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
     setLoading(true);
     setError(null);
     setResult(null);
+    setJobProgress(0);
 
-    const res = await agentQuery({
-      query: q,
+    const res = await chatQuery({
+      message: q,
       project_id: projectId,
       context: context || {},
-      auto_run: true,
     });
 
     if (!res.ok) {
       setError(res.message);
     } else {
       setResult(res.data);
-      // 如果创建了 job，开始轮询进度
-      if (res.data.answer_type === 'job_created' && res.data.job_id) {
-        pollJobProgress(res.data.job_id);
+      // job_created → 轮询进度
+      if (res.data.type === 'job_created' && res.data.jobId) {
+        pollJobProgress(res.data.jobId);
       }
     }
     setLoading(false);
@@ -53,7 +51,7 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
     const timer = setInterval(async () => {
       const status = await getAIJobStatus(jobId);
       if (status.ok) {
-        setJobProgress(status.data.progress);
+        setJobProgress(status.data.progress || 0);
         if (status.data.status === 'succeeded' || status.data.status === 'failed') {
           clearInterval(timer);
           setJobProgress(status.data.status === 'succeeded' ? 100 : 0);
@@ -64,19 +62,28 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
     }, 2000);
   };
 
-  const handleAction = (action: AgentNextAction) => {
-    if (action.action === 'run_segmentation') setInput('上传 MRI 影像并执行 AI 分割');
-    else if (action.action === 'run_gwas') setInput('做 GWAS 分析');
+  const handleAction = (action: { label: string; action: string; params?: Record<string, unknown> }) => {
+    if (action.action === 'run_gwas') setInput('做 GWAS 分析');
     else if (action.action === 'run_mr') setInput('做孟德尔随机化分析');
+    else if (action.action === 'generate_report') setInput('生成科研报告');
     else if (action.action === 'view_capabilities') setInput('查看可用能力');
-    else if (action.action === 'query_status') setInput('查看分析进度');
+    else if (action.action === 'list_jobs') setInput('查看任务进度');
+    else if (action.action === 'view_result') setInput('查看分析进度');
+    else if (action.action === 'run_capability') {
+      const cap = action.params?.capability;
+      if (cap === 'gwas_analysis') setInput('做 GWAS 分析');
+      else if (cap === 'mendelian_randomization') setInput('做孟德尔随机化分析');
+      else if (cap === 'mediation_mr') setInput('做中介 MR 分析');
+      else if (cap === 'risk_modeling') setInput('做风险建模');
+      else if (cap === 'report_generation') setInput('生成科研报告');
+      else if (cap === 'image_segmentation') setInput('上传 MRI 并执行 AI 分割');
+      else setInput(`执行 ${cap}`);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
   };
-
-  const isDone = result?.answer_type === 'job_created';
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -88,7 +95,7 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入自然语言指令，如：做 GWAS 分析..."
+            placeholder="输入问题或指令，如：做 GWAS 分析..."
             disabled={loading}
             className="w-full bg-white border border-border rounded-lg px-3.5 py-2 text-sm text-text-primary
                        placeholder:text-text-muted
@@ -115,7 +122,7 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
         </button>
       </div>
       <p className="text-[10px] text-text-muted">
-        试试：「做 GWAS」「跑孟德尔随机化」「生成报告」「查看进度」
+        试试：「做 GWAS」「MR 分析」「查看进度」「生成报告」
       </p>
 
       {/* ---- Error ---- */}
@@ -132,8 +139,34 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
         </div>
       )}
 
+      {/* ---- answer (AI 回复) ---- */}
+      {result?.type === 'answer' && (
+        <DashboardCard padding="md" className="bg-gradient-to-b from-navy-50/20 to-white border-navy-100">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-navy-700 text-white flex items-center justify-center shrink-0 text-xs font-heading font-bold">
+              AI
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{result.message}</p>
+            </div>
+          </div>
+          {result.actions && result.actions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border">
+              <span className="text-[10px] text-text-muted self-center">试试：</span>
+              {result.actions.slice(0, 4).map((a, i) => (
+                <button key={i} onClick={() => handleAction(a)}
+                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-white border border-border
+                             text-navy-600 hover:text-navy-800 hover:border-navy-600 transition-card">
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </DashboardCard>
+      )}
+
       {/* ---- job_created ---- */}
-      {isDone && (
+      {result?.type === 'job_created' && (
         <DashboardCard padding="md" className="bg-green-50/30 border-green-100">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -145,7 +178,7 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
               <p className="text-sm font-heading font-semibold text-text-primary">任务已创建</p>
               <p className="text-xs text-text-secondary mt-0.5">
                 {result.message}
-                {result.job_id && <span className="font-mono text-[10px] text-text-muted ml-1">({result.job_id})</span>}
+                {result.jobId && <span className="font-mono text-[10px] text-text-muted ml-1">({result.jobId})</span>}
               </p>
               {jobProgress > 0 && jobProgress < 100 && (
                 <div className="mt-2 space-y-1">
@@ -158,10 +191,9 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
               )}
             </div>
           </div>
-          {/* Next actions */}
-          {result.next_actions && result.next_actions.length > 0 && (
+          {result.actions && result.actions.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border">
-              {result.next_actions.slice(0, 4).map((a, i) => (
+              {result.actions.slice(0, 4).map((a, i) => (
                 <button key={i} onClick={() => handleAction(a)}
                   className="px-2.5 py-1 rounded text-[11px] font-medium bg-white border border-border
                              text-text-secondary hover:text-text-primary hover:border-navy-600 transition-card">
@@ -174,7 +206,7 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
       )}
 
       {/* ---- need_more_info ---- */}
-      {result?.answer_type === 'need_more_info' && (
+      {result?.type === 'need_more_info' && (
         <DashboardCard padding="md" className="bg-blue-50/30 border-blue-100">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
@@ -185,20 +217,44 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
             <div className="min-w-0 flex-1">
               <p className="text-sm font-heading font-semibold text-text-primary">需要补充信息</p>
               <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-wrap">{result.message}</p>
-              {result.missing_params && result.missing_params.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {result.missing_params.map((p) => (
-                    <span key={p} className="px-2 py-0.5 rounded text-[10px] font-medium bg-white border border-border text-navy-600">
-                      {p}
+              {/* Suggested inputs from parameter completer */}
+              {result.suggestedInputs && result.suggestedInputs.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  {result.suggestedInputs.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[10px]">
+                      <span className="text-text-muted w-16 shrink-0">{s.label || s.field}</span>
+                      {s.type === 'upload' ? (
+                        <span className="px-2 py-0.5 rounded bg-gold-50 border border-gold-200 text-gold-700">
+                          需要上传
+                        </span>
+                      ) : s.type === 'select' || s.type === 'multi-select' ? (
+                        <span className="px-2 py-0.5 rounded bg-white border border-border text-navy-600">
+                          {Array.isArray(s.suggested_value) ? s.suggested_value.join(', ') : String(s.suggested_value ?? s.hint ?? '—')}
+                        </span>
+                      ) : (
+                        <span className="text-text-primary font-medium">
+                          {s.suggested_value != null ? String(s.suggested_value) : s.hint || '请提供'}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Blocked fields */}
+              {result.blockedFields && result.blockedFields.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {result.blockedFields.map((f) => (
+                    <span key={f} className="px-2 py-0.5 rounded text-[10px] font-medium bg-gold-50 border border-gold-200 text-gold-700">
+                      {f} — 需用户操作
                     </span>
                   ))}
                 </div>
               )}
             </div>
           </div>
-          {result.next_actions && result.next_actions.length > 0 && (
+          {result.actions && result.actions.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border">
-              {result.next_actions.slice(0, 4).map((a, i) => (
+              {result.actions.slice(0, 4).map((a, i) => (
                 <button key={i} onClick={() => handleAction(a)}
                   className="px-2.5 py-1 rounded text-[11px] font-medium bg-white border border-border
                              text-text-secondary hover:text-text-primary hover:border-navy-600 transition-card">
@@ -210,27 +266,26 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
         </DashboardCard>
       )}
 
-      {/* ---- unsupported ---- */}
-      {result?.answer_type === 'unsupported' && (
-        <DashboardCard padding="md" className="bg-surface-alt/50">
-          <div className="flex items-start gap-3 mb-3">
+      {/* ---- job_status ---- */}
+      {result?.type === 'job_status' && (
+        <DashboardCard padding="md" className="bg-surface-alt/50 border-border">
+          <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              <svg className="w-4 h-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-heading font-semibold text-text-primary">暂不支持该请求</p>
-              <p className="text-xs text-text-muted mt-0.5">{result.message}</p>
+              <p className="text-sm font-heading font-semibold text-text-primary">任务状态</p>
+              <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-wrap">{result.message}</p>
             </div>
           </div>
-          {result.next_actions && result.next_actions.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              <span className="text-[10px] text-text-muted mr-1 self-center">试试：</span>
-              {result.next_actions.slice(0, 5).map((a, i) => (
+          {result.actions && result.actions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border">
+              {result.actions.map((a, i) => (
                 <button key={i} onClick={() => handleAction(a)}
                   className="px-2.5 py-1 rounded text-[11px] font-medium bg-white border border-border
-                             text-navy-600 hover:text-navy-800 hover:border-navy-600 transition-card">
+                             text-text-secondary hover:text-text-primary hover:border-navy-600 transition-card">
                   {a.label}
                 </button>
               ))}

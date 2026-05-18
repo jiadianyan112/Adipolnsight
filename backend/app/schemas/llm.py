@@ -131,6 +131,68 @@ class LLMReportEnhancement(BaseModel):
     abstract: str = ""
 
 
+# ===== Parameter Completion =====
+
+class LLMParameterCompletion(BaseModel):
+    """LLM 参数补全输出"""
+    completed_params: Dict[str, Any] = Field(default_factory=dict, alias="completedParams")
+    suggested_defaults: Dict[str, Any] = Field(default_factory=dict, alias="suggestedDefaults")
+    questions: List[str] = Field(default_factory=list)
+    is_ready_to_create: bool = Field(default=False, alias="isReadyToCreate")
+    user_message: str = Field(default="", alias="userMessage")
+
+    model_config = {"populate_by_name": True}
+
+
+# ===== Chat Answer =====
+
+class LLMChatAnswer(BaseModel):
+    """LLM 对话输出"""
+    reply: str
+    suggested_actions: List[str] = Field(default_factory=list, alias="suggestedActions")
+    references: List[Dict[str, str]] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+# ===== Summary =====
+
+class LLMSummary(BaseModel):
+    """LLM 项目摘要输出"""
+    project_status: str = Field(default="", alias="projectStatus")
+    completed_analyses: List[Dict[str, Any]] = Field(default_factory=list, alias="completedAnalyses")
+    running_analyses: List[Dict[str, Any]] = Field(default_factory=list, alias="runningAnalyses")
+    failed_analyses: List[Dict[str, Any]] = Field(default_factory=list, alias="failedAnalyses")
+    recommended_next: Optional[Dict[str, Any]] = Field(default=None, alias="recommendedNext")
+    summary_text: str = Field(default="", alias="summaryText")
+    pipeline_progress: Dict[str, int] = Field(default_factory=dict, alias="pipelineProgress")
+
+    model_config = {"populate_by_name": True}
+
+
+# ===== Report Generation =====
+
+class LLMReportSection(BaseModel):
+    """LLM 生成的报告章节"""
+    title: str
+    content: str = ""
+    evidence_job_ids: List[str] = Field(default_factory=list, alias="evidenceJobIds")
+    related_figures: List[Dict[str, str]] = Field(default_factory=list, alias="relatedFigures")
+    related_tables: List[Dict[str, str]] = Field(default_factory=list, alias="relatedTables")
+
+    model_config = {"populate_by_name": True}
+
+
+class LLMReportOutput(BaseModel):
+    """LLM 生成的完整报告（结构化 JSON）"""
+    title: str
+    sections: List[LLMReportSection] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+    next_steps: List[str] = Field(default_factory=list, alias="nextSteps")
+
+    model_config = {"populate_by_name": True}
+
+
 # ===== Chat Context =====
 
 class LLMChatContext(BaseModel):

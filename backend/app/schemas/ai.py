@@ -21,6 +21,7 @@ AI_CAPABILITY_TYPE = Literal[
     "mediation_mr",
     "risk_modeling",
     "report_generation",
+    "result_interpretation",
 ]
 
 AI_JOB_STATUS = Literal["pending", "running", "success", "failed", "cancelled"]
@@ -502,11 +503,13 @@ URL_CAPABILITY_MAP: dict[str, str] = {
     "mediation-mr": "mediation_mr",
     "risk-modeling": "risk_modeling",
     "report": "report_generation",
+    "interpretation": "result_interpretation",
 }
 
 VALID_URL_CAPABILITIES = Literal[
     "segmentation", "phenotype", "gwas", "mr",
     "mediation-mr", "risk-modeling", "report",
+    "interpretation",
 ]
 
 

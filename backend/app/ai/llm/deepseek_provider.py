@@ -119,7 +119,7 @@ class DeepSeekProvider(LLMProvider):
         model = self._select_model(request)
         messages = self._build_messages(request, json_mode)
         temperature = self._select_temperature(request, json_mode)
-        max_tokens = request.max_tokens or request.maxTokens or LLM_MAX_TOKENS
+        max_tokens = request.max_tokens or LLM_MAX_TOKENS
 
         extra_body: Dict[str, Any] = {}
         if DEEPSEEK_ENABLE_THINKING:
@@ -128,10 +128,10 @@ class DeepSeekProvider(LLMProvider):
                 extra_body["thinking"]["effort"] = DEEPSEEK_REASONING_EFFORT
 
         logger.info(
-            "DeepSeek call: model=%s task=%s json=%s msgs=%d temp=%.2f",
+            "DeepSeek call: model=%s task=%s json=%s msgs=%d temp=%.2f max_tokens=%d",
             model, request.task_type, json_mode, len(messages), temperature,
+            max_tokens,
         )
-        logger.debug("DeepSeek messages preview: %s", _sanitize_for_log(str(messages)))
 
         last_error = None
         for attempt in range(LLM_MAX_RETRIES + 1):
@@ -208,7 +208,7 @@ class DeepSeekProvider(LLMProvider):
                     continue
 
             except APIStatusError as exc:
-                logger.error("DeepSeek API error: status=%s body=%s", exc.status_code, _sanitize_for_log(str(exc.body)))
+                logger.error("DeepSeek API error: status=%s", exc.status_code)
                 return self._error_response("PROVIDER_ERROR", f"API status {exc.status_code}", str(exc))
 
             except Exception as exc:
@@ -245,7 +245,7 @@ class DeepSeekProvider(LLMProvider):
         try:
             parsed = json.loads(json_str)
         except json.JSONDecodeError as exc:
-            logger.error("DeepSeek JSON parse failed: %s", _sanitize_for_log(content))
+            logger.error("DeepSeek JSON parse failed: len=%d", len(content))
             return self._error_response("INVALID_JSON", f"JSON parse error: {exc}", _sanitize_for_log(content, 200))
 
         # 3. Schema validate（可选）
@@ -259,8 +259,8 @@ class DeepSeekProvider(LLMProvider):
                     parsed = [v.model_dump() if hasattr(v, 'model_dump') else dict(v) for v in validated]
             except Exception as exc:
                 logger.warning(
-                    "DeepSeek schema validation failed: %s data=%s",
-                    exc, _sanitize_for_log(str(parsed)),
+                    "DeepSeek schema validation failed: %s data_keys=%s",
+                    exc, list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
                 )
                 return self._error_response(
                     "SCHEMA_VALIDATION_FAILED",

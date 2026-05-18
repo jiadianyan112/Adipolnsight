@@ -6,6 +6,7 @@ import StatusBadge from '../shared/StatusBadge';
 import SecondaryButton from '../shared/SecondaryButton';
 import PrimaryButton from '../shared/PrimaryButton';
 import ProgressBar from '../shared/ProgressBar';
+import AIInterpretationPanel from '../result/AIInterpretationPanel';
 
 // ===== Props =====
 
@@ -260,6 +261,16 @@ export default function MediationMRModule({ mediationTask, projectId, exposureNa
           </div>
         </div>
       </div>
+
+      {/* ===== AI Interpretation ===== */}
+      {result && projectId && (
+        <AIInterpretationPanel
+          jobType="mediation_mr"
+          resultData={result as unknown as Record<string, unknown>}
+          projectId={projectId}
+          sourceJobId={jobId || undefined}
+        />
+      )}
     </div>
   );
 }

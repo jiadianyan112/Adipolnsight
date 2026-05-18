@@ -71,6 +71,7 @@ class Job:
     # 错误
     error_code: str = ""
     error_message: str = ""
+    user_facing_error: Optional[Dict[str, Any]] = None   # error_explainer 生成
 
     # 时间戳
     created_at: str = ""
@@ -107,6 +108,7 @@ class Job:
             "output_files": self.output_files,
             "error_code": self.error_code,
             "error_message": self.error_message,
+            "user_facing_error": self.user_facing_error,
             "created_at": self.created_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -411,6 +413,30 @@ class JobManager:
         job.progress_stage = "失败"
         job.error_code = error_code
         job.error_message = error_message
+
+        # 生成用户友好错误解释
+        try:
+            from backend.app.ai.llm.error_explainer import (
+                error_explainer,
+                ErrorExplanationInput,
+            )
+            explanation = error_explainer.explain(ErrorExplanationInput(
+                error_code=error_code,
+                technical_message=error_message,
+                job_type=job.capability_type,
+                stage=job.progress_stage,
+                user_action="",
+                context={"job_id": job.job_id, "project_id": job.project_id},
+            ))
+            job.user_facing_error = {
+                "user_message": explanation.user_message,
+                "possible_reasons": explanation.possible_reasons,
+                "next_actions": explanation.next_actions,
+                "technical_summary": explanation.technical_summary,
+            }
+        except Exception:
+            job.user_facing_error = None
+
         job.finished_at = Job._now()
         job.touch()
         self._store.save(job)
@@ -484,6 +510,7 @@ class JobManager:
             "progress_stage": job.progress_stage,
             "error_code": job.error_code,
             "error_message": job.error_message,
+            "user_facing_error": job.user_facing_error,
             "started_at": job.started_at,
             "finished_at": job.finished_at,
             "updated_at": job.updated_at,

@@ -8,6 +8,13 @@ AdipoInsight 全局配置
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(
+    Path(__file__).resolve().parent.parent.parent / ".env",
+    override=False,
+)
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # ===== 路径 =====

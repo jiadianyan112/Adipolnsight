@@ -34,6 +34,7 @@ CapabilityType = Literal[
     "mediation_mr",
     "risk_modeling",
     "report_generation",
+    "result_interpretation",
 ]
 
 
