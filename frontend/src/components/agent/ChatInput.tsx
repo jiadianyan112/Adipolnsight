@@ -1,8 +1,75 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { ChatResponse } from '../../services/aiService';
 import { chatQuery, getAIJobStatus, getAIJobResult } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
+
+// ===== MR Result Types =====
+
+interface MREstimate {
+  method: string;
+  beta: number;
+  se: number;
+  odds_ratio: number;
+  ci_lower: number;
+  ci_upper: number;
+  p_value: number;
+  n_snps: number;
+}
+
+interface MRPleiotropy {
+  egger_intercept: number;
+  se: number;
+  pval: number;
+  interpretation: string;
+}
+
+interface MRHeterogeneityItem {
+  method: string;
+  q_statistic: number;
+  q_df: number;
+  q_pval: number;
+}
+
+interface MRJobResult {
+  exposure: string;
+  outcome: string;
+  n_snps: number;
+  beta: number;
+  se: number;
+  p_value: number;
+  odds_ratio: number;
+  estimates: MREstimate[];
+  heterogeneity: MRHeterogeneityItem[];
+  pleiotropy: MRPleiotropy;
+}
+
+function isMRJobResult(obj: unknown): obj is MRJobResult {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return false;
+  const r = obj as Record<string, unknown>;
+  return (
+    typeof r.exposure === 'string' &&
+    typeof r.outcome === 'string' &&
+    typeof r.n_snps === 'number' &&
+    Array.isArray(r.estimates) &&
+    r.estimates.length > 0 &&
+    typeof r.estimates[0] === 'object' &&
+    r.estimates[0] !== null &&
+    typeof (r.estimates[0] as Record<string, unknown>).method === 'string'
+  );
+}
+
+function fmtNum(val: unknown, digits: number): string {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '—';
+  return n.toFixed(digits);
+}
+
+function fmtExp(val: unknown, digits: number): string {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '—';
+  return n.toExponential(digits);
+}
 
 // ===== Props =====
 
@@ -20,8 +87,15 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
   const [result, setResult] = useState<ChatResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState(0);
-  const [jobResult, setJobResult] = useState<Record<string, unknown> | null>(null);
+  const [jobResultRaw, setJobResultRaw] = useState<unknown>(null);
   const [jobResultLoading, setJobResultLoading] = useState(false);
+
+  const jobResult = useMemo<MRJobResult | null>(
+    () => isMRJobResult(jobResultRaw) ? jobResultRaw : null,
+    [jobResultRaw],
+  );
+
+  const hasMRResult = jobResult !== null;
 
   const handleSubmit = async () => {
     const q = input.trim();
@@ -71,8 +145,8 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
   const fetchJobResult = async (jobId: string) => {
     setJobResultLoading(true);
     const res = await getAIJobResult(jobId);
-    if (res.ok) {
-      setJobResult(res.data.result as Record<string, unknown> || null);
+    if (res.ok && res.data.result) {
+      setJobResultRaw(res.data.result);
     }
     setJobResultLoading(false);
   };
@@ -210,12 +284,18 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
                 </p>
               )}
               {/* MR Analysis Results */}
-              {jobResult && jobResult.estimates && (
+              {hasMRResult && (() => {
+                const r = jobResult;
+                const pleioPval = r.pleiotropy.pval;
+                const noPleiotropy = pleioPval > 0.05;
+                const heteroItem = Array.isArray(r.heterogeneity) && r.heterogeneity.length > 0
+                  ? r.heterogeneity[0] : null;
+                return (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs font-heading font-semibold text-text-primary">
-                    {String(jobResult.exposure || '暴露')} → {String(jobResult.outcome || '结局')}
+                    {r.exposure} → {r.outcome}
                     <span className="ml-1 text-[10px] text-text-muted font-normal">
-                      ({jobResult.n_snps} SNPs)
+                      ({String(r.n_snps)} SNPs)
                     </span>
                   </p>
                   <div className="overflow-x-auto">
@@ -230,35 +310,34 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
                         </tr>
                       </thead>
                       <tbody>
-                        {(jobResult.estimates as Array<Record<string,unknown>>).map((e, i) => (
+                        {r.estimates.map((e, i) => (
                           <tr key={i} className={i === 0 ? 'font-semibold text-navy-700' : 'text-text-secondary'}>
-                            <td className="py-0.5">{String(e.method)}</td>
-                            <td className="text-right">{Number(e.beta).toFixed(4)}</td>
-                            <td className="text-right">{Number(e.se).toFixed(4)}</td>
-                            <td className="text-right">{Number(e.odds_ratio).toFixed(3)}</td>
-                            <td className="text-right">{Number(e.p_value).toExponential(2)}</td>
+                            <td className="py-0.5">{e.method}</td>
+                            <td className="text-right">{fmtNum(e.beta, 4)}</td>
+                            <td className="text-right">{fmtNum(e.se, 4)}</td>
+                            <td className="text-right">{fmtNum(e.odds_ratio, 3)}</td>
+                            <td className="text-right">{fmtExp(e.p_value, 2)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                   {/* Sensitivity */}
-                  {jobResult.pleiotropy && (
-                    <div className="text-[10px] text-text-secondary space-y-0.5">
-                      <p>
-                        Egger intercept = {Number((jobResult.pleiotropy as Record<string,unknown>).egger_intercept).toFixed(5)}
-                        , P = {Number((jobResult.pleiotropy as Record<string,unknown>).pval).toFixed(4)}
-                        <span className={Number((jobResult.pleiotropy as Record<string,unknown>).pval) > 0.05 ? ' text-green-600 ml-1' : ' text-red-500 ml-1'}>
-                          {Number((jobResult.pleiotropy as Record<string,unknown>).pval) > 0.05 ? '✓ 无多效性' : '⚠ 存在多效性'}
-                        </span>
-                      </p>
-                      {jobResult.heterogeneity && (
-                        <p>Cochran's Q P = {Number((jobResult.heterogeneity as Array<Record<string,unknown>>)[0]?.q_pval).toFixed(4)}</p>
-                      )}
-                    </div>
-                  )}
+                  <div className="text-[10px] text-text-secondary space-y-0.5">
+                    <p>
+                      Egger intercept = {fmtNum(r.pleiotropy.egger_intercept, 5)}
+                      , P = {fmtNum(pleioPval, 4)}
+                      <span className={noPleiotropy ? ' text-green-600 ml-1' : ' text-red-500 ml-1'}>
+                        {noPleiotropy ? '✓ 无多效性' : '⚠ 存在多效性'}
+                      </span>
+                    </p>
+                    {heteroItem !== null && (
+                      <p>Cochran's Q P = {fmtNum(heteroItem.q_pval, 4)}</p>
+                    )}
+                  </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
           {result.actions && result.actions.length > 0 && (
