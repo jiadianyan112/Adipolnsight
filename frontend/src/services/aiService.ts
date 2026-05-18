@@ -8,7 +8,7 @@
  * - 页面组件禁止直接 import 此文件，应通过 Store 调用
  */
 
-import api from './apiClient';
+import api, { aiApi } from './apiClient';
 import type {
   AIJob,
   AIJobCreateRequest,
@@ -670,7 +670,7 @@ export async function createAISegmentationJob(
   params: SegmentationJobParams,
 ): Promise<AIServiceResult<AIJobFromAPI>> {
   return withErrorBoundary(async () => {
-    const res = await api.post<AIApiEnvelope<AIJobFromAPI>>('/ai/segmentation/jobs', {
+    const res = await aiApi.post<AIApiEnvelope<AIJobFromAPI>>('/ai/segmentation/jobs', {
       project_id: projectId,
       parameters: {
         file_id: params.file_id,
@@ -696,7 +696,7 @@ export async function getAIJobStatus(
   jobId: string,
 ): Promise<AIServiceResult<AIJobFromAPI>> {
   return withErrorBoundary(async () => {
-    const res = await api.get<AIApiEnvelope<AIJobFromAPI>>(`/ai/jobs/${jobId}`);
+    const res = await aiApi.get<AIApiEnvelope<AIJobFromAPI>>(`/ai/jobs/${jobId}`);
     if (!res.data.success) {
       throw new Error(res.data.error?.message || '查询任务状态失败');
     }
@@ -713,7 +713,7 @@ export async function getAIJobResult(
   jobId: string,
 ): Promise<AIServiceResult<{ result: Record<string, unknown>; output_files: string[]; capability_type: string }>> {
   return withErrorBoundary(async () => {
-    const res = await api.get<AIApiEnvelope<{
+    const res = await aiApi.get<AIApiEnvelope<{
       result: Record<string, unknown>;
       output_files: string[];
       capability_type: string;
@@ -734,7 +734,7 @@ export async function cancelAIJob(
   jobId: string,
 ): Promise<AIServiceResult<AIJobFromAPI>> {
   return withErrorBoundary(async () => {
-    const res = await api.post<AIApiEnvelope<AIJobFromAPI>>(`/ai/jobs/${jobId}/cancel`);
+    const res = await aiApi.post<AIApiEnvelope<AIJobFromAPI>>(`/ai/jobs/${jobId}/cancel`);
     if (!res.data.success) {
       throw new Error(res.data.error?.message || '取消任务失败');
     }
@@ -777,7 +777,7 @@ export async function createAIJob(
   params: Record<string, unknown>,
 ): Promise<AIServiceResult<AIJobFromAPI>> {
   return withErrorBoundary(async () => {
-    const res = await api.post<AIApiEnvelope<AIJobFromAPI>>(`/ai/${capability}/jobs`, {
+    const res = await aiApi.post<AIApiEnvelope<AIJobFromAPI>>(`/ai/${capability}/jobs`, {
       project_id: projectId,
       parameters: params,
     });
@@ -945,7 +945,7 @@ export async function agentQuery(
   payload: AgentQueryRequest,
 ): Promise<AIServiceResult<AgentQueryResponse>> {
   return withErrorBoundary(async () => {
-    const res = await api.post<AIApiEnvelope<AgentQueryResponse>>('/ai/agent', payload);
+    const res = await aiApi.post<AIApiEnvelope<AgentQueryResponse>>('/ai/agent', payload);
     if (!res.data.success) {
       throw new Error(res.data.error?.message || 'Agent query failed');
     }
@@ -994,7 +994,7 @@ export async function chatQuery(
   payload: ChatRequest,
 ): Promise<AIServiceResult<ChatResponse>> {
   return withErrorBoundary(async () => {
-    const res = await api.post<AIApiEnvelope<ChatResponse>>('/ai/chat', payload);
+    const res = await aiApi.post<AIApiEnvelope<ChatResponse>>('/ai/chat', payload);
     if (!res.data.success) {
       throw new Error(res.data.error?.message || 'Chat query failed');
     }

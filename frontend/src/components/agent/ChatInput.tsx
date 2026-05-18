@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ChatResponse } from '../../services/aiService';
-import { chatQuery, getAIJobStatus } from '../../services/aiService';
+import { chatQuery, getAIJobStatus, getAIJobResult } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
 
@@ -20,6 +20,8 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
   const [result, setResult] = useState<ChatResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState(0);
+  const [jobResult, setJobResult] = useState<Record<string, unknown> | null>(null);
+  const [jobResultLoading, setJobResultLoading] = useState(false);
 
   const handleSubmit = async () => {
     const q = input.trim();
@@ -52,9 +54,13 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
       const status = await getAIJobStatus(jobId);
       if (status.ok) {
         setJobProgress(status.data.progress || 0);
-        if (status.data.status === 'succeeded' || status.data.status === 'failed') {
+        if (status.data.status === 'succeeded') {
           clearInterval(timer);
-          setJobProgress(status.data.status === 'succeeded' ? 100 : 0);
+          setJobProgress(100);
+          fetchJobResult(jobId);
+        } else if (status.data.status === 'failed') {
+          clearInterval(timer);
+          setJobProgress(0);
         }
       } else {
         clearInterval(timer);
@@ -62,13 +68,24 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
     }, 2000);
   };
 
+  const fetchJobResult = async (jobId: string) => {
+    setJobResultLoading(true);
+    const res = await getAIJobResult(jobId);
+    if (res.ok) {
+      setJobResult(res.data.result as Record<string, unknown> || null);
+    }
+    setJobResultLoading(false);
+  };
+
   const handleAction = (action: { label: string; action: string; params?: Record<string, unknown> }) => {
-    if (action.action === 'run_gwas') setInput('做 GWAS 分析');
+    if (action.action === 'view_result') {
+      const jobId = action.params?.job_id as string;
+      if (jobId) { setJobProgress(100); fetchJobResult(jobId); }
+    } else if (action.action === 'run_gwas') setInput('做 GWAS 分析');
     else if (action.action === 'run_mr') setInput('做孟德尔随机化分析');
     else if (action.action === 'generate_report') setInput('生成科研报告');
     else if (action.action === 'view_capabilities') setInput('查看可用能力');
     else if (action.action === 'list_jobs') setInput('查看任务进度');
-    else if (action.action === 'view_result') setInput('查看分析进度');
     else if (action.action === 'run_capability') {
       const cap = action.params?.capability;
       if (cap === 'gwas_analysis') setInput('做 GWAS 分析');
@@ -187,7 +204,60 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
                 </div>
               )}
               {jobProgress === 100 && (
-                <p className="text-[10px] text-green-600 mt-2 font-medium">任务执行完成</p>
+                <p className="text-[10px] text-green-600 mt-2 font-medium">
+                  任务执行完成
+                  {jobResultLoading && <span className="ml-1 text-text-muted">— 加载结果中...</span>}
+                </p>
+              )}
+              {/* MR Analysis Results */}
+              {jobResult && jobResult.estimates && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-heading font-semibold text-text-primary">
+                    {String(jobResult.exposure || '暴露')} → {String(jobResult.outcome || '结局')}
+                    <span className="ml-1 text-[10px] text-text-muted font-normal">
+                      ({jobResult.n_snps} SNPs)
+                    </span>
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="text-text-muted">
+                          <th className="text-left py-1">方法</th>
+                          <th className="text-right py-1">beta</th>
+                          <th className="text-right py-1">SE</th>
+                          <th className="text-right py-1">OR</th>
+                          <th className="text-right py-1">P</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(jobResult.estimates as Array<Record<string,unknown>>).map((e, i) => (
+                          <tr key={i} className={i === 0 ? 'font-semibold text-navy-700' : 'text-text-secondary'}>
+                            <td className="py-0.5">{String(e.method)}</td>
+                            <td className="text-right">{Number(e.beta).toFixed(4)}</td>
+                            <td className="text-right">{Number(e.se).toFixed(4)}</td>
+                            <td className="text-right">{Number(e.odds_ratio).toFixed(3)}</td>
+                            <td className="text-right">{Number(e.p_value).toExponential(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Sensitivity */}
+                  {jobResult.pleiotropy && (
+                    <div className="text-[10px] text-text-secondary space-y-0.5">
+                      <p>
+                        Egger intercept = {Number((jobResult.pleiotropy as Record<string,unknown>).egger_intercept).toFixed(5)}
+                        , P = {Number((jobResult.pleiotropy as Record<string,unknown>).pval).toFixed(4)}
+                        <span className={Number((jobResult.pleiotropy as Record<string,unknown>).pval) > 0.05 ? ' text-green-600 ml-1' : ' text-red-500 ml-1'}>
+                          {Number((jobResult.pleiotropy as Record<string,unknown>).pval) > 0.05 ? '✓ 无多效性' : '⚠ 存在多效性'}
+                        </span>
+                      </p>
+                      {jobResult.heterogeneity && (
+                        <p>Cochran's Q P = {Number((jobResult.heterogeneity as Array<Record<string,unknown>>)[0]?.q_pval).toFixed(4)}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

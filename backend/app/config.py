@@ -109,8 +109,9 @@ FRONTEND_ENV_WHITELIST = {"AI_MODE", "API_PORT", "FRONTEND_PORT"}
 
 OPENGWAS_API_BASE = os.getenv(
     "OPENGWAS_API_BASE",
-    "https://gwas-api.mrcieu.ac.uk",
+    "https://api.opengwas.io/api",
 )
+OPENGWAS_JWT = os.getenv("OPENGWAS_JWT", "")
 GWAS_CATALOG_API_BASE = os.getenv(
     "GWAS_CATALOG_API_BASE",
     "https://www.ebi.ac.uk/gwas/api",
