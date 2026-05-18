@@ -3,7 +3,6 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
 import { createAIReportJob, getAIJobStatus, getAIJobResult } from '../services/aiService';
-import type { AIJobFromAPI } from '../services/aiService';
 import type { ReportGenerationResult } from '../types';
 import ReportViewer from '../components/report/ReportViewer';
 import PageShell from '../components/shared/PageShell';
@@ -108,7 +107,7 @@ export default function ReportPage() {
         stopPolling();
         const r = await getAIJobResult(jId);
         if (r.ok && r.data.result) {
-          setReport(r.data.result as ReportGenerationResult);
+          setReport(r.data.result as unknown as ReportGenerationResult);
           setPageState('preview');
         } else {
           setPageState('error');

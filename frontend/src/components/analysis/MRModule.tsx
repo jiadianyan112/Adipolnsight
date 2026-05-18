@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask } from '../../types';
 import { createAIMRJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
-import type { AIJobFromAPI } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
-import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
-import SecondaryButton from '../shared/SecondaryButton';
 import PrimaryButton from '../shared/PrimaryButton';
 import AIInterpretationPanel from '../result/AIInterpretationPanel';
 import { Scatter, XAxis, YAxis, ResponsiveContainer, Line, ComposedChart, Cell } from 'recharts';
@@ -99,7 +96,7 @@ type MRJobState = 'idle' | 'creating' | 'running' | 'done' | 'failed';
 
 // ===== Component =====
 
-export default function MRModule({ mrTask, projectId, exposureName, outcomeName, onViewResult, onRunTask, onMRComplete }: Props) {
+export default function MRModule({ mrTask, projectId, exposureName, outcomeName, onRunTask, onMRComplete }: Props) {
   const hasMr = !!(mrTask && mrTask.id);
   const legacyRunning = mrTask?.status === 'running';
   const legacySuccess = mrTask?.status === 'success';
@@ -107,7 +104,6 @@ export default function MRModule({ mrTask, projectId, exposureName, outcomeName,
   const [jobState, setJobState] = useState<MRJobState>('idle');
   const [jobId, setJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MRResultData | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,7 +136,6 @@ export default function MRModule({ mrTask, projectId, exposureName, outcomeName,
     setJobState('running');
     setJobId(jobResult.data.job_id);
     setProgress(0);
-    setStage('开始执行');
 
     const jId = jobResult.data.job_id;
     pollRef.current = setInterval(async () => {
@@ -148,13 +143,12 @@ export default function MRModule({ mrTask, projectId, exposureName, outcomeName,
       if (!status.ok) { stopPolling(); setJobState('failed'); setError(status.message); return; }
       const j = status.data;
       setProgress(j.progress);
-      setStage(j.progress_stage);
 
       if (j.status === 'succeeded') {
         stopPolling();
         const r = await getAIJobResult(jId);
         if (r.ok && r.data.result) {
-          const parsed = r.data.result as MRResultData;
+          const parsed = r.data.result as unknown as MRResultData;
           setResult(parsed);
           setJobState('done');
           setProgress(100);

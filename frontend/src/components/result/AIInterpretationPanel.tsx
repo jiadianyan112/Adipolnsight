@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createAIJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
-import type { AIJobFromAPI } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
 
@@ -59,7 +58,6 @@ export default function AIInterpretationPanel({
   className = '',
 }: Props) {
   const [state, setState] = useState<PanelState>('idle');
-  const [jobId, setJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [interpretation, setInterpretation] = useState<InterpretationResult | null>(null);
@@ -92,7 +90,6 @@ export default function AIInterpretationPanel({
     }
 
     setState('running');
-    setJobId(res.data.job_id);
     setProgress(0);
 
     const jId = res.data.job_id;
@@ -112,11 +109,11 @@ export default function AIInterpretationPanel({
         stopPolling();
         const result = await getAIJobResult(jId);
         if (result.ok && result.data.result) {
-          setInterpretation(result.data.result as InterpretationResult);
+          setInterpretation(result.data.result as unknown as InterpretationResult);
           setState('done');
         } else {
           // 尝试从 job status 本身获取 result
-          const jobResult = (d as Record<string, unknown>).result as Record<string, unknown> | undefined;
+          const jobResult = (d as unknown as Record<string, unknown>).result as Record<string, unknown> | undefined;
           if (jobResult) {
             setInterpretation(jobResult as unknown as InterpretationResult);
             setState('done');

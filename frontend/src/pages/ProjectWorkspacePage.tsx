@@ -181,7 +181,7 @@ export default function ProjectWorkspacePage() {
             phenotypeName={currentProject?.exposure || 'Liver_PDFF'}
             onViewResult={handleViewResult}
             onRunTask={handleRun}
-            onGWASComplete={(data) => setSegmentationData(null)}
+            onGWASComplete={(_data) => setSegmentationData(null)}
           />
         )}
         {selectedWorkflow === 'mr' && (

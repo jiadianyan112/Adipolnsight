@@ -124,6 +124,9 @@ export type {
   FileType,
   SegmentationTarget,
   SegmentationRequest,
+  DiceScores,
+  VolumeMetrics,
+  QualityControl,
   SegmentationDiceScores,
   SegmentationResult,
   SegmentationOutputFiles,
@@ -170,6 +173,10 @@ export type {
   ReportSection,
   ReportGenerationResult,
   ReportOutputFiles,
+  ReportFigure,
+  ReportTable,
+  ReportReference,
+  ExportFormat,
 } from './analysis';
 export {
   MR_METHODS,

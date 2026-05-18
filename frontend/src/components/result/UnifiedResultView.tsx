@@ -1,4 +1,4 @@
-import { type AnalysisResult, type SegmentationResult as SegResultType } from '../../types';
+import { type AnalysisResult } from '../../types';
 import SegmentationResultView, { type SegmentationResultData } from './SegmentationResultView';
 
 function SummaryCards({ summary }: { summary: Record<string, unknown> }) {

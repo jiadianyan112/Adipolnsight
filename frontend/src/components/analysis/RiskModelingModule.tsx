@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask } from '../../types';
 import { createAIRiskModelingJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
-import type { AIJobFromAPI } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
-import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
 import PrimaryButton from '../shared/PrimaryButton';
 import AIInterpretationPanel from '../result/AIInterpretationPanel';
@@ -44,7 +42,7 @@ interface Props {
 
 type JobState = 'idle' | 'creating' | 'running' | 'done' | 'failed';
 
-export default function RiskModelingModule({ riskTask, projectId, exposureName, outcomeName, onRunTask }: Props) {
+export default function RiskModelingModule({ riskTask, projectId, exposureName }: Props) {
   const hasTask = !!(riskTask && riskTask.id);
   const [jobState, setJobState] = useState<JobState>('idle');
   const [progress, setProgress] = useState(0);
@@ -74,7 +72,7 @@ export default function RiskModelingModule({ riskTask, projectId, exposureName, 
       const s = await getAIJobStatus(jId);
       if (!s.ok) { stop(); setJobState('failed'); setError(s.message); return; }
       setProgress(s.data.progress); setStage(s.data.progress_stage);
-      if (s.data.status === 'succeeded') { stop(); const r = await getAIJobResult(jId); if (r.ok && r.data.result) { setResult(r.data.result as RiskModelingResultData); setJobState('done'); } else { setJobState('failed'); setError('结果获取失败'); } }
+      if (s.data.status === 'succeeded') { stop(); const r = await getAIJobResult(jId); if (r.ok && r.data.result) { setResult(r.data.result as unknown as RiskModelingResultData); setJobState('done'); } else { setJobState('failed'); setError('结果获取失败'); } }
       else if (s.data.status === 'failed') { stop(); setJobState('failed'); setError(s.data.error_message || '执行失败'); }
     }, 2000);
   };

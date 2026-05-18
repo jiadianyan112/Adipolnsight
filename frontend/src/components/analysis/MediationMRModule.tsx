@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask } from '../../types';
 import { createAIMediationMRJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
-import type { AIJobFromAPI } from '../../services/aiService';
 import StatusBadge from '../shared/StatusBadge';
-import SecondaryButton from '../shared/SecondaryButton';
 import PrimaryButton from '../shared/PrimaryButton';
 import ProgressBar from '../shared/ProgressBar';
 import AIInterpretationPanel from '../result/AIInterpretationPanel';
@@ -63,7 +61,7 @@ const TASKS = [
 
 // ===== Component =====
 
-export default function MediationMRModule({ mediationTask, projectId, exposureName, outcomeName, onViewResult, onRunTask, onMediationComplete }: Props) {
+export default function MediationMRModule({ mediationTask, projectId, exposureName, outcomeName, onMediationComplete }: Props) {
   const [selectedSource, setSelectedSource] = useState('decode_plasma');
   const hasMediation = !!(mediationTask && mediationTask.id);
   const legacySuccess = mediationTask?.status === 'success';
@@ -108,7 +106,7 @@ export default function MediationMRModule({ mediationTask, projectId, exposureNa
       if (j.status === 'succeeded') {
         stopPolling();
         const r = await getAIJobResult(jId);
-        if (r.ok && r.data.result) { setResult(r.data.result as MediationMRResultData); setJobState('done'); setProgress(100); onMediationComplete?.(r.data.result as MediationMRResultData); }
+        if (r.ok && r.data.result) { setResult(r.data.result as unknown as MediationMRResultData); setJobState('done'); setProgress(100); onMediationComplete?.(r.data.result as unknown as MediationMRResultData); }
         else { setJobState('failed'); setError('结果获取失败'); }
       } else if (j.status === 'failed') { stopPolling(); setJobState('failed'); setError(j.error_message || '中介 MR 执行失败'); }
     }, 2000);

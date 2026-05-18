@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask } from '../../types';
 import { createAIGWASJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
-import type { AIJobFromAPI } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
-import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
-import SecondaryButton from '../shared/SecondaryButton';
 import PrimaryButton from '../shared/PrimaryButton';
 import AIInterpretationPanel from '../result/AIInterpretationPanel';
 import { ScatterChart, Scatter, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts';
@@ -52,7 +49,7 @@ const SIG_THRESHOLD = -Math.log10(5e-8);
 
 // ===== Component =====
 
-export default function GWASModule({ gwasTask, opengwasTask, projectId, phenotypeName, onViewResult, onRunTask, onGWASComplete }: Props) {
+export default function GWASModule({ gwasTask, projectId, phenotypeName, onRunTask, onGWASComplete }: Props) {
   // Legacy task state
   const hasGwas = !!(gwasTask && gwasTask.id);
   const legacyRunning = gwasTask?.status === 'running';
@@ -113,7 +110,7 @@ export default function GWASModule({ gwasTask, opengwasTask, projectId, phenotyp
         stopPolling();
         const r = await getAIJobResult(jId);
         if (r.ok && r.data.result) {
-          const parsed = r.data.result as GWASResultData;
+          const parsed = r.data.result as unknown as GWASResultData;
           setResult(parsed);
           setJobState('done');
           setProgress(100);

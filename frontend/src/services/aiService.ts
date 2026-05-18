@@ -13,7 +13,6 @@ import type {
   AIJob,
   AIJobCreateRequest,
   AIJobErrorCode,
-  AIJobStatus,
   UploadedFile,
   FileType,
   SegmentationResult,

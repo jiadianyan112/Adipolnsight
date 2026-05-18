@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask, UploadedFile, DiceScores, VolumeMetrics, QualityControl } from '../../types';
 import { uploadMedicalImage, createAISegmentationJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
-import type { AIJobFromAPI } from '../../services/aiService';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
 import MiniChartCard from '../shared/MiniChartCard';
@@ -218,7 +217,7 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
         // 获取结果
         const jobResult = await getAIJobResult(jobId);
         if (jobResult.ok && jobResult.data.result) {
-          const parsed = jobResult.data.result as SegmentationResultFromAPI;
+          const parsed = jobResult.data.result as unknown as SegmentationResultFromAPI;
           setSegResult(parsed);
           setSegState('done');
           setSegProgress(100);

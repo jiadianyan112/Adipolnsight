@@ -1,5 +1,5 @@
 import ReactMarkdown from 'react-markdown';
-import type { ReportGenerationResult, ReportSection, ReportFigure, ReportTable, ReportReference, ExportFormat } from '../../types';
+import type { ReportGenerationResult, ReportSection, ReportFigure, ReportReference, ExportFormat } from '../../types';
 import DashboardCard from '../shared/DashboardCard';
 import StatusBadge from '../shared/StatusBadge';
 
