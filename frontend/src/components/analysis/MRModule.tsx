@@ -6,6 +6,8 @@ import ProgressBar from '../shared/ProgressBar';
 import PrimaryButton from '../shared/PrimaryButton';
 import AIInterpretationPanel from '../result/AIInterpretationPanel';
 import { Scatter, XAxis, YAxis, ResponsiveContainer, Line, ComposedChart, Cell } from 'recharts';
+import SafeChartContainer from '../charts/SafeChartContainer';
+import { isSuccessRaw, isRunningRaw } from '../../utils/jobStatus';
 
 // ===== Props =====
 
@@ -98,8 +100,8 @@ type MRJobState = 'idle' | 'creating' | 'running' | 'done' | 'failed';
 
 export default function MRModule({ mrTask, projectId, exposureName, outcomeName, onRunTask, onMRComplete }: Props) {
   const hasMr = !!(mrTask && mrTask.id);
-  const legacyRunning = mrTask?.status === 'running';
-  const legacySuccess = mrTask?.status === 'success';
+  const legacyRunning = isRunningRaw(mrTask?.status);
+  const legacySuccess = isSuccessRaw(mrTask?.status);
 
   const [jobState, setJobState] = useState<MRJobState>('idle');
   const [jobId, setJobId] = useState<string | null>(null);
@@ -239,21 +241,25 @@ export default function MRModule({ mrTask, projectId, exposureName, outcomeName,
           </div>
           {isRunning && <ProgressBar value={progress} size="sm" />}
 
-          <div className="bg-surface rounded-lg p-2 mt-2" style={{ height: 220 }}>
+          <div className="bg-surface rounded-lg p-2 mt-2">
             {scatterPoints.length > 0 ? (
-              <ResponsiveContainer width="100%" height="85%">
-                <ComposedChart margin={{ top: 4, right: 8, bottom: 16, left: 28 }}>
-                  <XAxis type="number" dataKey="exposure_effect" domain={['auto', 'auto']} tick={{ fontSize: 8, fill: 'var(--color-text-muted)' }} axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }} />
-                  <YAxis type="number" dataKey="outcome_effect" domain={['auto', 'auto']} tick={{ fontSize: 8, fill: 'var(--color-text-muted)' }} axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }} />
-                  <Scatter data={scatterPoints} isAnimationActive={false} name="SNPs">
-                    {scatterPoints.map((_, i) => (<Cell key={i} fill="var(--color-navy-600)" opacity={0.4} />))}
-                  </Scatter>
-                  <Line data={[{ exposure_effect: -0.3, outcome_effect: -0.3 * beta }, { exposure_effect: 0.3, outcome_effect: 0.3 * beta }]}
-                    dataKey="outcome_effect" stroke="var(--color-danger-600)" strokeWidth={1.5} dot={false} isAnimationActive={false} name="IVW" />
-                </ComposedChart>
-              </ResponsiveContainer>
+              <SafeChartContainer minHeight={200}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart margin={{ top: 4, right: 8, bottom: 16, left: 28 }}>
+                    <XAxis type="number" dataKey="exposure_effect" domain={['auto', 'auto']} tick={{ fontSize: 8, fill: 'var(--color-text-muted)' }} axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }} />
+                    <YAxis type="number" dataKey="outcome_effect" domain={['auto', 'auto']} tick={{ fontSize: 8, fill: 'var(--color-text-muted)' }} axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }} />
+                    <Scatter data={scatterPoints} isAnimationActive={false} name="SNPs">
+                      {scatterPoints.map((_, i) => (<Cell key={i} fill="var(--color-navy-600)" opacity={0.4} />))}
+                    </Scatter>
+                    <Line data={[{ exposure_effect: -0.3, outcome_effect: -0.3 * beta }, { exposure_effect: 0.3, outcome_effect: 0.3 * beta }]}
+                      dataKey="outcome_effect" stroke="var(--color-danger-600)" strokeWidth={1.5} dot={false} isAnimationActive={false} name="IVW" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </SafeChartContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-[10px] text-text-muted">{isRunning ? '分析中...' : '运行 MR 分析以查看散点图'}</div>
+              <div className="flex items-center justify-center text-[10px] text-text-muted" style={{ height: 200 }}>
+                {isRunning ? '分析中...' : '运行 MR 分析以查看散点图'}
+              </div>
             )}
           </div>
         </DashboardCard>

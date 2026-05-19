@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask } from '../../types';
 import { createAIMediationMRJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
+import { isSuccessRaw, isSuccessStatus, isFailedStatus } from '../../utils/jobStatus';
 import StatusBadge from '../shared/StatusBadge';
 import PrimaryButton from '../shared/PrimaryButton';
 import ProgressBar from '../shared/ProgressBar';
@@ -64,7 +65,7 @@ const TASKS = [
 export default function MediationMRModule({ mediationTask, projectId, exposureName, outcomeName, onMediationComplete }: Props) {
   const [selectedSource, setSelectedSource] = useState('decode_plasma');
   const hasMediation = !!(mediationTask && mediationTask.id);
-  const legacySuccess = mediationTask?.status === 'success';
+  const legacySuccess = isSuccessRaw(mediationTask?.status);
 
   const [jobState, setJobState] = useState<MedJobState>('idle');
   const [jobId, setJobId] = useState<string | null>(null);
@@ -103,12 +104,12 @@ export default function MediationMRModule({ mediationTask, projectId, exposureNa
       const status = await getAIJobStatus(jId);
       if (!status.ok) { stopPolling(); setJobState('failed'); setError(status.message); return; }
       const j = status.data; setProgress(j.progress); setStage(j.progress_stage);
-      if (j.status === 'succeeded') {
+      if (isSuccessStatus(j.status)) {
         stopPolling();
         const r = await getAIJobResult(jId);
         if (r.ok && r.data.result) { setResult(r.data.result as unknown as MediationMRResultData); setJobState('done'); setProgress(100); onMediationComplete?.(r.data.result as unknown as MediationMRResultData); }
         else { setJobState('failed'); setError('结果获取失败'); }
-      } else if (j.status === 'failed') { stopPolling(); setJobState('failed'); setError(j.error_message || '中介 MR 执行失败'); }
+      } else if (isFailedStatus(j.status)) { stopPolling(); setJobState('failed'); setError(j.error_message || '中介 MR 执行失败'); }
     }, 2000);
   };
 
@@ -221,7 +222,7 @@ export default function MediationMRModule({ mediationTask, projectId, exposureNa
             <h5 className="font-heading font-semibold text-sm text-text-primary mb-3">中介 MR 分析结果</h5>
             {isDone && ranked.length > 0 ? (
               <div className="table-scroll">
-                <table className="w-full text-[11px]" aria-label="Mediation MR results table">
+                <table className="w-full text-[11px]" aria-label="中介 MR 分析结果表">
                   <thead>
                     <tr className="text-text-muted border-b-2 border-border">
                       <th className="text-left py-2 px-2 font-heading font-semibold">Rank</th>

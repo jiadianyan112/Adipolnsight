@@ -76,15 +76,15 @@ export interface FileAsset {
 
 // ===== 旧常量（保留兼容，建议迁移至 ai.ts 中的新定义） =====
 
-/** @deprecated 使用 ai.ts 中的 AI_CAPABILITY_LABELS（含 8 项能力） */
+/** 分析类型中文标签（紧凑版，用于 Tab、Badge 等） */
 export const TASK_TYPE_LABELS: Record<string, string> = {
-  image_segmentation: 'AI 影像分割',
-  gwas_analysis: 'GWAS 分析',
+  image_segmentation: '影像分割',
+  gwas_analysis: 'GWAS 全基因组关联',
   opengwas_fetch: 'OpenGWAS 数据获取',
-  mendelian_randomization: '孟德尔随机化分析',
-  mediation_mr: '中介 MR 分析',
+  mendelian_randomization: '孟德尔随机化',
+  mediation_mr: '中介孟德尔随机化',
   risk_modeling: '风险建模',
-  report_generation: '报告生成',
+  report_generation: '科研报告生成',
 };
 
 /** @deprecated 使用 ai.ts 中的 PIPELINE_ORDER（含 phenotype_quantification） */
@@ -117,7 +117,9 @@ export {
   AI_JOB_ERROR_LABELS,
   PROGRESS_STAGES,
   DEFAULT_POLLING_CONFIG,
+  AI_JOB_TERMINAL_STATUS_VALUES,
 } from './job';
+export { isTerminalStatus, isSuccessStatus, isFailedStatus } from './job';
 
 export type {
   UploadedFile,

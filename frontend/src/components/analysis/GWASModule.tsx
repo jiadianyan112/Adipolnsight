@@ -6,6 +6,8 @@ import ProgressBar from '../shared/ProgressBar';
 import PrimaryButton from '../shared/PrimaryButton';
 import AIInterpretationPanel from '../result/AIInterpretationPanel';
 import { ScatterChart, Scatter, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts';
+import SafeChartContainer from '../charts/SafeChartContainer';
+import { isSuccessRaw, isRunningRaw } from '../../utils/jobStatus';
 
 // ===== Props =====
 
@@ -52,8 +54,8 @@ const SIG_THRESHOLD = -Math.log10(5e-8);
 export default function GWASModule({ gwasTask, projectId, phenotypeName, onRunTask, onGWASComplete }: Props) {
   // Legacy task state
   const hasGwas = !!(gwasTask && gwasTask.id);
-  const legacyRunning = gwasTask?.status === 'running';
-  const legacySuccess = gwasTask?.status === 'success';
+  const legacyRunning = isRunningRaw(gwasTask?.status);
+  const legacySuccess = isSuccessRaw(gwasTask?.status);
 
   // New AI job state
   const [jobState, setJobState] = useState<GWASJobState>('idle');
@@ -246,30 +248,32 @@ export default function GWASModule({ gwasTask, projectId, phenotypeName, onRunTa
           {isRunning && <ProgressBar value={progress} size="sm" />}
           {jobState === 'running' && <p className="text-[10px] text-text-muted mt-1">{stage}</p>}
 
-          <div className="bg-surface rounded-lg p-2 mt-2" style={{ height: 220 }}>
+          <div className="bg-surface rounded-lg p-2 mt-2">
             <div className="flex items-center justify-between mb-1 px-1">
               <span className="text-[10px] text-text-muted font-medium">曼哈顿图 — {manhattanData.length > 0 ? '后端数据' : '等待分析'}</span>
               {result && <span className="text-[10px] text-text-muted">λ = {result.lambda_gc.toFixed(2)}</span>}
             </div>
             {manhattanData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="85%">
-                <ScatterChart margin={{ top: 4, right: 8, bottom: 16, left: 28 }}>
-                  <XAxis type="number" dataKey="pos" domain={[0, 'auto']} tick={false}
-                    axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }} />
-                  <YAxis type="number" dataKey="neg_log10_p" domain={[0, 'auto']}
-                    tick={{ fontSize: 8, fill: 'var(--color-text-muted)' }}
-                    axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }}
-                    label={{ value: '-log₁₀(p)', angle: -90, position: 'left', offset: -2, style: { fontSize: 9, fill: 'var(--color-text-muted)' } }} />
-                  <Scatter data={manhattanData} isAnimationActive={false}>
-                    {manhattanData.map((d, i) => (
-                      <Cell key={i} fill={d.neg_log10_p > SIG_THRESHOLD ? 'var(--color-danger-600)' : d.neg_log10_p > 5 ? 'var(--color-blue-500)' : 'var(--color-navy-600)'}
-                        opacity={d.neg_log10_p > SIG_THRESHOLD ? 0.9 : d.neg_log10_p > 5 ? 0.5 : 0.2} />
-                    ))}
-                  </Scatter>
-                </ScatterChart>
-              </ResponsiveContainer>
+              <SafeChartContainer minHeight={200}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ScatterChart margin={{ top: 4, right: 8, bottom: 16, left: 28 }}>
+                    <XAxis type="number" dataKey="pos" domain={[0, 'auto']} tick={false}
+                      axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }} />
+                    <YAxis type="number" dataKey="neg_log10_p" domain={[0, 'auto']}
+                      tick={{ fontSize: 8, fill: 'var(--color-text-muted)' }}
+                      axisLine={{ stroke: 'var(--color-border)', strokeWidth: 1 }}
+                      label={{ value: '-log₁₀(p)', angle: -90, position: 'left', offset: -2, style: { fontSize: 9, fill: 'var(--color-text-muted)' } }} />
+                    <Scatter data={manhattanData} isAnimationActive={false}>
+                      {manhattanData.map((d, i) => (
+                        <Cell key={i} fill={d.neg_log10_p > SIG_THRESHOLD ? 'var(--color-danger-600)' : d.neg_log10_p > 5 ? 'var(--color-blue-500)' : 'var(--color-navy-600)'}
+                          opacity={d.neg_log10_p > SIG_THRESHOLD ? 0.9 : d.neg_log10_p > 5 ? 0.5 : 0.2} />
+                      ))}
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </SafeChartContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-[10px] text-text-muted">
+              <div className="flex items-center justify-center text-[10px] text-text-muted" style={{ height: 200 }}>
                 {isRunning ? '分析中...' : '运行 GWAS 分析以查看曼哈顿图'}
               </div>
             )}

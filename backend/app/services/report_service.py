@@ -1,3 +1,15 @@
+"""
+报告生成服务 — 旧版模板引擎
+
+DEPRECATED since v0.3.0:
+此文件不再被 API 端点直接调用。报告生成已迁移至 JobManager + ReportGenerationSkill。
+保留此文件作为迁移参考，后续版本将移除。
+
+新生成路径：
+  POST /api/v1/projects/:id/reports/generate → JobManager → ReportGenerationSkill
+  POST /api/ai/report/jobs                     → JobManager → ReportGenerationSkill
+"""
+
 import json
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session

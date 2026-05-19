@@ -145,12 +145,14 @@ def _section_background(
             f"采用「影像 → 遗传 → 因果 → 中介 → 临床」五步分析策略。"
         )
 
+    job_count = sum(len(v) for v in classified_jobs.values())
+    unique_types = len(classified_jobs)
     return {
         "number": 1,
         "title": "项目背景与研究目标",
         "content": content,
         "status": "complete",
-        "summary": f"本项目共完成 {sum(len(v) for v in classified_jobs.values())} 项分析",
+        "summary": f"本项目共完成 {job_count} 项分析（覆盖 {unique_types} 个分析类型）",
         "evidence_job_ids": [],
         "related_figures": [],
         "related_tables": [],
@@ -210,10 +212,14 @@ def _section_pending(
 def _section_discussion(
     classified_jobs: Dict[str, list], report_type: str, lang: str,
 ) -> dict:
-    """综合讨论与结论。"""
+    """综合讨论与结论 — 基于实际数据统计完成数/待完成数。"""
+    pipeline_order = [
+        "image_segmentation", "phenotype_quantification", "gwas_analysis",
+        "mendelian_randomization", "mediation_mr", "risk_modeling",
+    ]
     capabilities = list(classified_jobs.keys())
-    sections_done = len(capabilities)
-    total_sections = 7
+    sections_done = len([c for c in pipeline_order if c in classified_jobs])
+    total_sections = len(pipeline_order)
     pending = total_sections - sections_done
 
     if report_type == "summary_report":
@@ -256,7 +262,7 @@ def _section_discussion(
         "title": "综合讨论与结论",
         "content": content,
         "status": "complete" if sections_done > 0 else "pending",
-        "summary": f"已完成 {sections_done}/{total_sections} 项分析" + (f"，{pending} 项待完成" if pending > 0 else ""),
+        "summary": f"已基于 {sections_done}/{total_sections} 项分析结果撰写" + (f"（{pending} 项待完成）" if pending > 0 else ""),
         "evidence_job_ids": [],
         "related_figures": [],
         "related_tables": [],
@@ -794,6 +800,12 @@ def build_report(
         "acknowledgments": "",
     }
 
+    from backend.app.ai.skills.mock_data import (
+        build_figures_for_sections,
+        build_tables_for_sections,
+        build_references_for_sections,
+    )
+
     return {
         "report_id": report_id,
         "project_id": 0,
@@ -802,9 +814,9 @@ def build_report(
         "report_type": report_type,
         "language": language,
         "sections": sections,
-        "figures": _build_figures(completed_caps) if include_figures else [],
-        "tables": _build_tables(completed_caps) if include_tables else [],
-        "references": _build_references(completed_caps),
+        "figures": build_figures_for_sections(completed_caps) if include_figures else [],
+        "tables": build_tables_for_sections(completed_caps) if include_tables else [],
+        "references": build_references_for_sections(completed_caps),
         "limitations": limitation_texts if limitation_texts else ["数据缺失：部分关键字段不可用"],
         "key_findings": key_findings,
         "export_formats": export_formats,
@@ -865,66 +877,5 @@ def _assemble_markdown(title: str, sections: List[dict], language: str) -> str:
     return "\n".join(lines)
 
 
-def _build_figures(completed_caps: List[str]) -> list:
-    """仅包含有数据支撑的图表。"""
-    figures = []
-    fig_map = {
-        "image_segmentation": [
-            {"figure_id": "fig_seg_1", "number": 1, "caption": "Figure 1: 腹部 MRI 分割叠加图", "type": "segmentation_overlay", "section_number": 2, "alt_text": "TSSA-UNet overlay", "source_job_id": ""},
-        ],
-        "gwas_analysis": [
-            {"figure_id": "fig_gwas_1", "number": 2, "caption": "Figure 2: GWAS Manhattan 图", "type": "manhattan", "section_number": 4, "alt_text": "Manhattan plot", "source_job_id": ""},
-            {"figure_id": "fig_gwas_2", "number": 3, "caption": "Figure 3: GWAS Q-Q 图", "type": "qq_plot", "section_number": 4, "alt_text": "QQ plot", "source_job_id": ""},
-        ],
-        "mendelian_randomization": [
-            {"figure_id": "fig_mr_1", "number": 4, "caption": "Figure 4: MR 散点图", "type": "scatter", "section_number": 5, "alt_text": "MR scatter", "source_job_id": ""},
-        ],
-        "mediation_mr": [
-            {"figure_id": "fig_medmr_1", "number": 5, "caption": "Figure 5: 中介 MR 森林图", "type": "forest", "section_number": 6, "alt_text": "Forest plot", "source_job_id": ""},
-        ],
-        "risk_modeling": [
-            {"figure_id": "fig_risk_1", "number": 6, "caption": "Figure 6: RCS 剂量反应曲线", "type": "rcs_curve", "section_number": 7, "alt_text": "RCS curve", "source_job_id": ""},
-        ],
-    }
-    for cap in completed_caps:
-        if cap in fig_map:
-            figures.extend(fig_map[cap])
-    return figures
-
-
-def _build_tables(completed_caps: List[str]) -> list:
-    """仅包含有数据支撑的表格。"""
-    return []
-
-
-def _build_references(completed_caps: List[str]) -> list:
-    """仅包含相关方法的参考文献。"""
-    all_refs = {
-        "image_segmentation": [
-            {"ref_id": "ref_nnunet", "number": 1, "doi": "10.1038/s41592-020-01008-z",
-             "text": "Isensee F, et al. nnU-Net. Nat Methods 2021;18:203–11.", "type": "method", "cited_in_sections": [2]},
-        ],
-        "gwas_analysis": [
-            {"ref_id": "ref_ukb", "number": 2, "doi": "10.1038/s41586-018-0579-z",
-             "text": "Bycroft C, et al. UK Biobank. Nature 2018;562:203–9.", "type": "database", "cited_in_sections": [4]},
-        ],
-        "mendelian_randomization": [
-            {"ref_id": "ref_mrbase", "number": 3, "doi": "10.7554/eLife.34408",
-             "text": "Hemani G, et al. MR-Base. eLife 2018;7:e34408.", "type": "method", "cited_in_sections": [5]},
-        ],
-        "mediation_mr": [
-            {"ref_id": "ref_decode", "number": 4, "doi": "10.1038/s41588-021-00978-w",
-             "text": "Ferkingstad E, et al. Plasma proteome genetics. Nat Genet 2021;53:1712–21.", "type": "database", "cited_in_sections": [6]},
-        ],
-    }
-    refs = []
-    seen = set()
-    for cap in completed_caps:
-        for ref in all_refs.get(cap, []):
-            if ref["ref_id"] not in seen:
-                refs.append(ref)
-                seen.add(ref["ref_id"])
-    # Renumber
-    for i, ref in enumerate(refs):
-        ref["number"] = i + 1
-    return refs
+# Figures / Tables / References 构建已迁移至 mock_data.py
+# 在 build_report() 中通过动态 import 调用

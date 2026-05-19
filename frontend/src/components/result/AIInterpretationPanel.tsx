@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createAIJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
+import { isSuccessStatus, isFailedStatus } from '../../utils/jobStatus';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
 
@@ -105,7 +106,7 @@ export default function AIInterpretationPanel({
       const d = status.data;
       setProgress(d.progress || 0);
 
-      if (d.status === 'succeeded') {
+      if (isSuccessStatus(d.status)) {
         stopPolling();
         const result = await getAIJobResult(jId);
         if (result.ok && result.data.result) {
@@ -122,7 +123,7 @@ export default function AIInterpretationPanel({
             setError(result.ok ? '结果解析失败' : result.message);
           }
         }
-      } else if (d.status === 'failed') {
+      } else if (isFailedStatus(d.status)) {
         stopPolling();
         setState('failed');
         setError(d.error_message || '解读任务执行失败');

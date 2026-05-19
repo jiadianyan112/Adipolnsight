@@ -1,5 +1,6 @@
 import type { AnalysisTask } from '../../types';
 import { TASK_TYPE_LABELS } from '../../types';
+import { isSuccessRaw, isFailedRaw, isActiveRaw } from '../../utils/jobStatus';
 import StatusBadge from '../shared/StatusBadge';
 import ProgressBar from '../shared/ProgressBar';
 import ErrorAlert from '../shared/ErrorAlert';
@@ -12,14 +13,14 @@ interface Props {
 }
 
 export default function TaskCard({ task, onRun, onViewResult, onRerun }: Props) {
-  const hasResult = task.status === 'success';
-  const isRunning = task.status === 'running' || task.status === 'pending';
-  const isFailed = task.status === 'failed';
+  const hasResult = isSuccessRaw(task.status);
+  const isRunning = isActiveRaw(task.status);
+  const isFailed = isFailedRaw(task.status);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="flex justify-between items-start mb-2">
-        <h4 className="font-medium text-sm text-gray-800">{task.task_name || TASK_TYPE_LABELS[task.task_type]}</h4>
+        <h4 className="font-medium text-sm text-gray-800">{TASK_TYPE_LABELS[task.task_type] || task.task_name}</h4>
         <StatusBadge status={task.status || 'pending'} />
       </div>
       {isRunning && <ProgressBar value={task.progress} />}

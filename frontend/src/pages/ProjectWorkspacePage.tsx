@@ -16,13 +16,15 @@ import MRModule from '../components/analysis/MRModule';
 import MediationMRModule from '../components/analysis/MediationMRModule';
 import RiskModelingModule from '../components/analysis/RiskModelingModule';
 import ChatInput from '../components/agent/ChatInput';
-import WorkflowSelectionPanel, { type WorkflowKey } from '../components/workflow/WorkflowSelectionPanel';
+import WorkspaceTabs, { WORKSPACE_TABS } from '../components/workflow/WorkspaceTabs';
 import WorkflowStepper from '../components/task/WorkflowStepper';
 import TaskCard from '../components/task/TaskCard';
 import TaskLogViewer from '../components/task/TaskLogViewer';
 import UnifiedResultView from '../components/result/UnifiedResultView';
 import SegmentationResultView from '../components/result/SegmentationResultView';
 import { PIPELINE_ORDER, TASK_TYPE_LABELS } from '../types';
+import { computePipelineProgress } from '../utils/pipelineProgress';
+import { isSuccessRaw } from '../utils/jobStatus';
 
 export default function ProjectWorkspacePage() {
   const { id } = useParams<{ id: string }>();
@@ -34,18 +36,15 @@ export default function ProjectWorkspacePage() {
 
   const [viewingTaskId, setViewingTaskId] = useState<number | null>(null);
   const [showLog, setShowLog] = useState<number | null>(null);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowKey>('mediation');
+  const [activeTab, setActiveTab] = useState('image_segmentation');
   const [segmentationData, setSegmentationData] = useState<SegmentationResultData | null>(null);
 
   useEffect(() => {
     fetchProject(pid);
     fetchTasks(pid);
+    startPolling(pid);
     return () => stopPolling();
   }, [pid]);
-
-  useEffect(() => {
-    startPolling(pid);
-  }, []);
 
   if (!currentProject) {
     return (
@@ -66,6 +65,9 @@ export default function ProjectWorkspacePage() {
   const taskMap: Record<string, any> = {};
   tasks.forEach((t) => { taskMap[t.task_type] = t; });
 
+  const pipeline = computePipelineProgress(tasks, PIPELINE_ORDER);
+  const hasAnySuccess = tasks.some((t) => isSuccessRaw(t.status));
+
   const handleRun = async (taskType: string) => {
     await createTask(pid, taskType);
     startPolling(pid);
@@ -81,16 +83,20 @@ export default function ProjectWorkspacePage() {
   };
 
   const handleGenerateReport = async () => {
-    const report = await generateReport(pid);
-    nav(`/projects/${pid}/report`, { state: { report } });
+    const result = await generateReport(pid);
+    // Pass job_id so ReportPage can auto-poll
+    nav(`/projects/${pid}/report`, { state: { reportJobId: result.job_id, reportStatus: result.status } });
   };
 
-  const hasAnySuccess = tasks.some((t) => t.status === 'success');
+  const jumpToTab = (taskType: string) => {
+    const exists = WORKSPACE_TABS.find((t) => t.key === taskType);
+    if (exists) setActiveTab(taskType);
+  };
 
   return (
     <PageShell>
       {/* ===== Project Info Bar ===== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 p-4 card-dashboard">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 p-4 card-dashboard">
         <div className="flex items-center gap-4 min-w-0">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
@@ -103,20 +109,20 @@ export default function ProjectWorkspacePage() {
           </div>
         </div>
         <div className="flex items-center gap-2 md:gap-3 text-xs text-text-secondary shrink-0 flex-wrap">
-          <span className="font-medium">暴露因素：<span className="text-text-primary">{currentProject.exposure}</span></span>
+          <span className="font-medium">暴露：<span className="text-text-primary">{currentProject.exposure}</span></span>
           <span className="text-border">|</span>
-          <span className="font-medium">结局变量：<span className="text-text-primary">{currentProject.outcome}</span></span>
+          <span className="font-medium">结局：<span className="text-text-primary">{currentProject.outcome}</span></span>
           {currentProject.mediator_set && (
             <>
               <span className="text-border">|</span>
-              <span className="font-medium">中介变量：<span className="text-text-primary">{currentProject.mediator_set}</span></span>
+              <span className="font-medium">中介：<span className="text-text-primary">{currentProject.mediator_set}</span></span>
             </>
           )}
         </div>
       </div>
 
       {/* ===== AI Agent Chat Input ===== */}
-      <div className="mb-5">
+      <div className="mb-4">
         <ChatInput
           projectId={pid}
           context={{
@@ -126,10 +132,43 @@ export default function ProjectWorkspacePage() {
         />
       </div>
 
-      {/* ===== Main Dashboard Grid ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
-        {/* ===== LEFT: Image Processing Module ===== */}
-        <div className="lg:col-span-3">
+      {/* ===== Pipeline Quick Bar ===== */}
+      <div className="flex items-center gap-4 mb-4 p-3 bg-white rounded-xl border border-border">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-full bg-white border-2 border-green-200 flex items-center justify-center">
+            <span className="text-sm font-heading font-bold text-green-600">{pipeline.percent}%</span>
+          </div>
+          <div>
+            <p className="text-xs font-heading font-semibold text-text-primary">
+              已完成 {pipeline.completed}/{pipeline.total}
+            </p>
+            <p className="text-[10px] text-text-muted">
+              {pipeline.running > 0 && `${pipeline.running} 进行中 · `}
+              {pipeline.failed > 0 && `${pipeline.failed} 失败 · `}
+              {pipeline.completed === pipeline.total ? '全部完成' : '进行中'}
+            </p>
+          </div>
+        </div>
+        <div className="flex-1 h-2 bg-surface-alt rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${pipeline.failed > 0 ? 'bg-gold-500' : 'bg-green-500'}`}
+            style={{ width: `${pipeline.percent}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <PrimaryButton onClick={handleRunAll} size="sm">运行全部</PrimaryButton>
+          {hasAnySuccess && (
+            <SecondaryButton onClick={handleGenerateReport} size="sm">生成报告</SecondaryButton>
+          )}
+        </div>
+      </div>
+
+      {/* ===== Workspace Tabs ===== */}
+      <WorkspaceTabs activeTab={activeTab} onSelect={setActiveTab} tasks={tasks} />
+
+      {/* ===== Tab Content ===== */}
+      <div className="space-y-5 mb-6">
+        {activeTab === 'image_segmentation' && (
           <ImageProcessingModule
             imageTask={taskMap['image_segmentation']}
             projectId={pid}
@@ -137,128 +176,122 @@ export default function ProjectWorkspacePage() {
             onSaveAndContinue={handleRunAll}
             onSegmentationComplete={(data) => {
               setSegmentationData(data);
-              setViewingTaskId(0); // 0 = 来自 ImageProcessingModule
+              setViewingTaskId(0);
             }}
           />
-        </div>
+        )}
 
-        {/* ===== RIGHT: Workflow Selection + Actions ===== */}
-        <div className="lg:col-span-2 space-y-4">
-          <WorkflowSelectionPanel
-            selected={selectedWorkflow}
-            onSelect={setSelectedWorkflow}
-          />
-
-          {/* Pipeline Actions */}
-          <DashboardCard padding="md">
-            <div className="space-y-2">
-              <PrimaryButton onClick={handleRunAll} className="w-full" size="lg">
-                运行完整分析流程
-              </PrimaryButton>
-              {hasAnySuccess && (
-                <SecondaryButton onClick={handleGenerateReport} className="w-full">
-                  生成分析报告
-                </SecondaryButton>
-              )}
-              {!hasAnySuccess && (
-                <p className="text-xs text-text-muted text-center">
-                  请先运行任务以启用报告生成
-                </p>
-              )}
-            </div>
-          </DashboardCard>
-        </div>
-      </div>
-
-      {/* ===== Analysis Modules — Contextual View ===== */}
-      <div className="space-y-5">
-        {/* Contextual module based on selected workflow */}
-        {selectedWorkflow === 'gwas' && (
+        {activeTab === 'gwas_analysis' && (
           <GWASModule
             gwasTask={taskMap['gwas_analysis']}
             opengwasTask={taskMap['opengwas_fetch']}
             projectId={pid}
             phenotypeName={currentProject?.exposure || 'Liver_PDFF'}
             onViewResult={handleViewResult}
-            onRunTask={handleRun}
+            onRunTask={(taskType) => { handleRun(taskType); jumpToTab(taskType); }}
             onGWASComplete={(_data) => setSegmentationData(null)}
           />
         )}
-        {selectedWorkflow === 'mr' && (
+
+        {activeTab === 'opengwas_fetch' && (
+          <DashboardCard padding="lg">
+            <h3 className="font-heading font-semibold text-text-primary mb-3">OpenGWAS 数据获取</h3>
+            <p className="text-sm text-text-secondary mb-4">
+              从 OpenGWAS 公共数据库获取 GWAS 汇总统计数据，用于双样本孟德尔随机化分析。
+            </p>
+            {taskMap['opengwas_fetch'] && taskMap['opengwas_fetch'].status ? (
+              <TaskCard
+                task={taskMap['opengwas_fetch']}
+                onRun={handleRun}
+                onViewResult={handleViewResult}
+                onRerun={rerunTask}
+              />
+            ) : (
+              <div className="text-center py-8 text-text-muted">
+                <p className="text-sm mb-2">尚无 OpenGWAS 数据任务</p>
+                <p className="text-xs mb-3">运行 GWAS 分析或完整流水线将自动创建</p>
+                <PrimaryButton onClick={() => handleRun('opengwas_fetch')} size="sm">
+                  手动创建 OpenGWAS 任务
+                </PrimaryButton>
+              </div>
+            )}
+          </DashboardCard>
+        )}
+
+        {activeTab === 'mendelian_randomization' && (
           <MRModule
             mrTask={taskMap['mendelian_randomization']}
             projectId={pid}
             exposureName={currentProject?.exposure || 'Liver_PDFF'}
             outcomeName={currentProject?.outcome || 'Osteoporosis'}
             onViewResult={handleViewResult}
-            onRunTask={handleRun}
+            onRunTask={(taskType) => { handleRun(taskType); jumpToTab(taskType); }}
           />
         )}
-        {selectedWorkflow === 'mediation' && (
+
+        {activeTab === 'mediation_mr' && (
           <MediationMRModule
             mediationTask={taskMap['mediation_mr']}
             projectId={pid}
             exposureName={currentProject?.exposure || 'Liver_PDFF'}
             outcomeName={currentProject?.outcome || 'Osteoporosis'}
             onViewResult={handleViewResult}
-            onRunTask={handleRun}
+            onRunTask={(taskType) => { handleRun(taskType); jumpToTab(taskType); }}
           />
         )}
 
-        {/* Risk Modeling — always visible when pipeline has relevant tasks */}
-        <RiskModelingModule
-          riskTask={taskMap['risk_modeling']}
-          projectId={pid}
-          exposureName={currentProject?.exposure || 'Liver_PDFF'}
-          outcomeName={currentProject?.outcome || 'Osteoporosis'}
-          onViewResult={handleViewResult}
-          onRunTask={handleRun}
-        />
+        {activeTab === 'risk_modeling' && (
+          <RiskModelingModule
+            riskTask={taskMap['risk_modeling']}
+            projectId={pid}
+            exposureName={currentProject?.exposure || 'Liver_PDFF'}
+            outcomeName={currentProject?.outcome || 'Osteoporosis'}
+            onViewResult={handleViewResult}
+            onRunTask={(taskType) => { handleRun(taskType); jumpToTab(taskType); }}
+          />
+        )}
 
-        {/* Pipeline Overview — all tasks */}
-        <DashboardCard padding="lg">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="shrink-0 w-7 h-7 rounded-lg bg-surface text-text-muted flex items-center justify-center text-xs font-heading font-bold border border-border">
-              4
-            </span>
-            <SectionTitle subtitle="完整分析流程状态与进度">
-              流程总览
-            </SectionTitle>
-          </div>
-          {/* Pipeline completion summary */}
-          {(() => {
-            const completed = tasks.filter((t) => t.status === 'success').length;
-            const running = tasks.filter((t) => t.status === 'running').length;
-            const failed = tasks.filter((t) => t.status === 'failed').length;
-            const total = PIPELINE_ORDER.length;
-            const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-            return (
-              <div className="flex items-center gap-4 mb-4 p-3 bg-surface rounded-xl">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-white border-2 border-green-200 flex items-center justify-center">
-                    <span className="text-sm font-heading font-bold text-green-600">{pct}%</span>
-                  </div>
-                  <div>
-                    <p className="text-xs font-heading font-semibold text-text-primary">已完成 {completed}/{total}</p>
-                    <p className="text-[10px] text-text-muted">
-                      {running > 0 && `${running} 个运行中 · `}
-                      {failed > 0 && `${failed} 个失败 · `}
-                      {completed === total ? '流程完成' : '进行中'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex-1 h-2 bg-white rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${failed > 0 ? 'bg-gold-500' : 'bg-green-500'}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+        {activeTab === 'report_generation' && (
+          <DashboardCard padding="lg">
+            <h3 className="font-heading font-semibold text-text-primary mb-3">科研报告</h3>
+            <p className="text-sm text-text-secondary mb-4">
+              整合所有已完成的分析结果，生成完整的科研分析报告。
+            </p>
+            {hasAnySuccess ? (
+              <div className="space-y-3">
+                <p className="text-xs text-text-muted">
+                  已有 {pipeline.completed} 个分析步骤完成，可以基于当前结果生成报告。
+                </p>
+                <PrimaryButton onClick={handleGenerateReport}>
+                  生成科研报告
+                </PrimaryButton>
               </div>
-            );
-          })()}
+            ) : (
+              <div className="text-center py-8 text-text-muted">
+                <p className="text-sm mb-2">暂无已完成的分析任务</p>
+                <p className="text-xs">请先运行至少一个分析任务</p>
+              </div>
+            )}
+          </DashboardCard>
+        )}
+      </div>
 
+      {/* ===== Pipeline Overview — collapsed at bottom ===== */}
+      <details className="mb-6 group" open={pipeline.completed === pipeline.total}>
+        <summary className="flex items-center gap-2 cursor-pointer p-3 card-dashboard list-none">
+          <svg className="w-4 h-4 text-text-muted group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <SectionTitle subtitle={`${pipeline.completed}/${pipeline.total} 步骤完成`}>
+            流程总览
+          </SectionTitle>
+          {pipeline.failed > 0 && (
+            <span className="text-xs text-red-500 font-heading ml-auto">{pipeline.failed} 失败</span>
+          )}
+        </summary>
+        <div className="p-4 bg-white border border-t-0 border-border rounded-b-xl space-y-3">
           <WorkflowStepper tasks={tasks} />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {PIPELINE_ORDER.map((tt) => (
               <TaskCard
                 key={tt}
@@ -274,54 +307,54 @@ export default function ProjectWorkspacePage() {
               />
             ))}
           </div>
-        </DashboardCard>
+        </div>
+      </details>
 
-        {/* Result Detail — from ImageProcessingModule (segmentation) */}
-        {viewingTaskId === 0 && segmentationData && (
-          <SegmentationResultView
-            data={segmentationData}
-            onClose={() => { setViewingTaskId(null); setSegmentationData(null); }}
-          />
-        )}
+      {/* ===== Result Detail — from ImageProcessingModule (segmentation) ===== */}
+      {viewingTaskId === 0 && segmentationData && (
+        <SegmentationResultView
+          data={segmentationData}
+          onClose={() => { setViewingTaskId(null); setSegmentationData(null); }}
+        />
+      )}
 
-        {/* Result Detail — from legacy AnalysisTask */}
-        {viewingTaskId && viewingTaskId !== 0 && currentResult && (
-          <DashboardCard padding="lg">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-heading font-semibold text-text-primary">
-                结果详情
-                <span className="text-sm font-normal text-text-muted ml-2">
-                  — {TASK_TYPE_LABELS[tasks.find((t) => t.id === viewingTaskId)?.task_type || ''] || '分析'}
-                </span>
-              </h3>
-              <SecondaryButton
-                size="sm"
-                onClick={() => { setViewingTaskId(null); setShowLog(null); }}
-              >
-                关闭
-              </SecondaryButton>
-            </div>
-            <UnifiedResultView
-              result={currentResult}
-              segmentationData={currentResult.result_type === 'image_segmentation' ? segmentationData : null}
-              onClose={() => { setViewingTaskId(null); setShowLog(null); }}
-            />
-            <button
-              onClick={() => setShowLog(viewingTaskId!)}
-              className="text-sm text-navy-600 hover:text-navy-800 mt-3 font-medium transition-card"
+      {/* ===== Result Detail — from legacy AnalysisTask ===== */}
+      {viewingTaskId && viewingTaskId !== 0 && currentResult && (
+        <DashboardCard padding="lg">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-heading font-semibold text-text-primary">
+              结果详情
+              <span className="text-sm font-normal text-text-muted ml-2">
+                — {TASK_TYPE_LABELS[tasks.find((t) => t.id === viewingTaskId)?.task_type || ''] || '分析'}
+              </span>
+            </h3>
+            <SecondaryButton
+              size="sm"
+              onClick={() => { setViewingTaskId(null); setShowLog(null); }}
             >
-              查看日志 →
-            </button>
-          </DashboardCard>
-        )}
+              关闭
+            </SecondaryButton>
+          </div>
+          <UnifiedResultView
+            result={currentResult}
+            segmentationData={currentResult.result_type === 'image_segmentation' ? segmentationData : null}
+            onClose={() => { setViewingTaskId(null); setShowLog(null); }}
+          />
+          <button
+            onClick={() => setShowLog(viewingTaskId!)}
+            className="text-sm text-navy-600 hover:text-navy-800 mt-3 font-medium transition-card"
+          >
+            查看日志 →
+          </button>
+        </DashboardCard>
+      )}
 
-        {/* Task Log Viewer */}
-        {showLog && (
-          <DashboardCard padding="lg">
-            <TaskLogViewer task={tasks.find((t) => t.id === showLog)!} />
-          </DashboardCard>
-        )}
-      </div>
+      {/* ===== Task Log Viewer ===== */}
+      {showLog && (
+        <DashboardCard padding="lg">
+          <TaskLogViewer task={tasks.find((t) => t.id === showLog)!} />
+        </DashboardCard>
+      )}
     </PageShell>
   );
 }

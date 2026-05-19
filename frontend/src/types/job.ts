@@ -3,13 +3,26 @@
  *
  * 覆盖任务创建 → 运行中 → 成功/失败/取消 的完整状态机，
  * 以及进度上报、错误码、轮询配置等。
+ *
+ * 状态归一化逻辑已迁移至 utils/jobStatus.ts；
+ * 此文件仍保留旧的 AIJobStatus 联合类型以保持向后兼容。
  */
 
 import type { AICapabilityType } from './ai';
+import {
+  normalizeJobStatus,
+  isTerminal,
+  isSuccess,
+  isFailed,
+  type NormalizedJobStatus,
+} from '../utils/jobStatus';
 
-// ===== 任务状态 =====
+// Re-export normalized types for convenience
+export type { NormalizedJobStatus };
 
-/** 任务生命周期状态 */
+// ===== 任务状态（已弃用） =====
+
+/** @deprecated 使用 utils/jobStatus.ts 中的 NormalizedJobStatus */
 export type AIJobStatus =
   | 'pending'
   | 'running'
@@ -17,14 +30,14 @@ export type AIJobStatus =
   | 'failed'
   | 'cancelled';
 
-/** 终态集合 */
+/** @deprecated 使用 utils/jobStatus.ts 中的 isTerminal() */
 export const AI_JOB_TERMINAL_STATUSES: ReadonlySet<AIJobStatus> = new Set([
   'success',
   'failed',
   'cancelled',
 ]);
 
-/** 状态标签（中文） */
+/** @deprecated 使用 utils/jobStatus.ts 中的 STATUS_LABEL */
 export const AI_JOB_STATUS_LABELS: Record<AIJobStatus, string> = {
   pending: '待开始',
   running: '运行中',
@@ -115,6 +128,40 @@ export interface AIJobCreateRequest {
   project_id: number;
   task_type: AICapabilityType;
   parameters?: Record<string, unknown>;
+}
+
+/** 终端状态的规范化集合 — 同时覆盖旧 API "success" 和新 API "succeeded" */
+export const AI_JOB_TERMINAL_STATUS_VALUES: ReadonlySet<string> = new Set([
+  'success',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'error',
+]);
+
+/**
+ * 判断状态字符串是否为终端状态。
+ * @deprecated 使用 utils/jobStatus.ts 中的 isTerminalRaw()
+ */
+export function isTerminalStatus(s: string): boolean {
+  const n = normalizeJobStatus(s);
+  return isTerminal(n);
+}
+
+/**
+ * 判断状态字符串是否表示成功。
+ * @deprecated 使用 utils/jobStatus.ts 中的 isSuccessRaw()
+ */
+export function isSuccessStatus(s: string): boolean {
+  return isSuccess(normalizeJobStatus(s));
+}
+
+/**
+ * 判断状态字符串是否表示失败。
+ * @deprecated 使用 utils/jobStatus.ts 中的 isFailedRaw()
+ */
+export function isFailedStatus(s: string): boolean {
+  return isFailed(normalizeJobStatus(s));
 }
 
 /** 轮询配置 */

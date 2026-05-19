@@ -1001,3 +1001,40 @@ export async function chatQuery(
     return res.data.data;
   }, 'AI Chat 请求失败');
 }
+
+// ===== 报告结果适配 =====
+
+/**
+ * 报告结果可能的原始形态：
+ * - 后端新 API 返回: { result: {...}, output_files: [...], capability_type: "..." }
+ * - result 字段包含完整的 ReportGenerationResult
+ *
+ * 此函数统一适配不同嵌套层级，确保页面组件拿到一致的 ReportGenerationResult。
+ */
+
+function hasStringField(obj: unknown, field: string): obj is Record<string, unknown> {
+  return typeof obj === 'object' && obj !== null && field in obj;
+}
+
+function isReportObject(obj: unknown): obj is Record<string, unknown> {
+  return hasStringField(obj, 'report_id') && hasStringField(obj, 'title');
+}
+
+export function adaptReportResult(raw: unknown): ReportGenerationResult | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const obj = raw as Record<string, unknown>;
+
+  // 情况 1: { result: <report>, output_files: [...] } — 来自 getAIJobResult
+  if (obj.result && typeof obj.result === 'object' && isReportObject(obj.result)) {
+    return obj.result as unknown as ReportGenerationResult;
+  }
+
+  // 情况 2: 直接是 report 对象 — 来自 getReportResult (旧 API)
+  if (isReportObject(obj)) {
+    return obj as unknown as ReportGenerationResult;
+  }
+
+  // 情况 3: 就是 ReportGenerationResult，但缺少必要字段
+  return null;
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AnalysisTask, UploadedFile, DiceScores, VolumeMetrics, QualityControl } from '../../types';
 import { uploadMedicalImage, createAISegmentationJob, getAIJobStatus, getAIJobResult } from '../../services/aiService';
+import { isSuccessRaw, isRunningRaw, isSuccessStatus, isFailedStatus } from '../../utils/jobStatus';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
 import MiniChartCard from '../shared/MiniChartCard';
@@ -41,11 +42,6 @@ interface SegmentationResultFromAPI {
   overlay_preview_url: string;
   warnings: string[];
 }
-
-const EMPTY_PHENOTYPE_CARD = (title: string, unit: string) => ({
-  title, value: '—', unit, trend: undefined as 'up' | 'down' | 'stable' | undefined,
-  trendValue: '等待分析结果', sparkline: [] as { v: number }[], sparklineColor: 'var(--color-text-muted)',
-});
 
 function BodyScanIllustration() {
   return (
@@ -111,8 +107,8 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ---- 衍生状态 ----
-  const isRunning = imageTask?.status === 'running' || segState === 'running';
-  const isSuccess = imageTask?.status === 'success' || segState === 'done';
+  const isRunning = isRunningRaw(imageTask?.status) || segState === 'running';
+  const isSuccess = isSuccessRaw(imageTask?.status) || segState === 'done';
   const taskProgress = segState === 'running' ? segProgress : (imageTask?.progress ?? 0);
 
   // 清理轮询
@@ -212,7 +208,7 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
       setSegProgress(job.progress);
       setSegStage(job.progress_stage);
 
-      if (job.status === 'succeeded') {
+      if (isSuccessStatus(job.status)) {
         stopPolling();
         // 获取结果
         const jobResult = await getAIJobResult(jobId);
@@ -226,7 +222,7 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
           setSegState('failed');
           setSegError('结果获取失败');
         }
-      } else if (job.status === 'failed') {
+      } else if (isFailedStatus(job.status)) {
         stopPolling();
         setSegState('failed');
         setSegError(job.error_message || '分割任务执行失败');
@@ -446,44 +442,30 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
       </div>
 
       {/* ===== Analysed Body Fat Phenotypes ===== */}
-      <div>
-        <h4 className="section-title-sm mb-3">已分析脂肪表型</h4>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-          {segResult ? [
-            { title: '肝脏 PDFF', value: segResult.volume_metrics.liver_pdff_pct.toFixed(1), unit: '%', dice: segResult.dice_scores.liver, color: 'var(--color-blue-500)' },
-            { title: '内脏脂肪体积', value: (segResult.volume_metrics.visceral_fat_volume_cm3 / 1000).toFixed(2), unit: 'L', dice: segResult.dice_scores.visceral_fat, color: 'var(--color-teal-600)' },
-            { title: '皮下脂肪体积', value: (segResult.volume_metrics.subcutaneous_fat_volume_cm3 / 1000).toFixed(2), unit: 'L', dice: segResult.dice_scores.subcutaneous_fat, color: 'var(--color-green-600)' },
-            { title: '骨髓脂肪分数', value: segResult.volume_metrics.bone_marrow_fat_fraction_pct.toFixed(1), unit: '%', dice: segResult.dice_scores.bone_marrow, color: 'var(--color-gold-500)' },
-          ].map(({ title, value, unit, dice, color }) => (
-            <MiniChartCard
-              key={title}
-              title={title}
-              value={value}
-              unit={unit}
-              sparkline={[{ v: Number(value) * 0.85 }, { v: Number(value) * 0.92 }, { v: Number(value) }]}
-              sparklineColor={color}
-              trend="up"
-              trendValue={`DICE: ${dice.toFixed(2)}`}
-            />
-          )) : [
-            EMPTY_PHENOTYPE_CARD('肝脏 PDFF', '%'),
-            EMPTY_PHENOTYPE_CARD('内脏脂肪体积', 'L'),
-            EMPTY_PHENOTYPE_CARD('皮下脂肪体积', 'L'),
-            EMPTY_PHENOTYPE_CARD('骨髓脂肪分数', '%'),
-          ].map((fp) => (
-            <MiniChartCard
-              key={fp.title}
-              title={fp.title}
-              value={fp.value}
-              unit={fp.unit}
-              sparkline={fp.sparkline}
-              sparklineColor={fp.sparklineColor}
-              trend={fp.trend}
-              trendValue={fp.trendValue}
-            />
-          ))}
+      {segResult && (
+        <div>
+          <h4 className="section-title-sm mb-3">已分析脂肪表型</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            {[
+              { title: '肝脏 PDFF', value: segResult.volume_metrics.liver_pdff_pct.toFixed(1), unit: '%', dice: segResult.dice_scores.liver, color: 'var(--color-blue-500)' },
+              { title: '内脏脂肪体积', value: (segResult.volume_metrics.visceral_fat_volume_cm3 / 1000).toFixed(2), unit: 'L', dice: segResult.dice_scores.visceral_fat, color: 'var(--color-teal-600)' },
+              { title: '皮下脂肪体积', value: (segResult.volume_metrics.subcutaneous_fat_volume_cm3 / 1000).toFixed(2), unit: 'L', dice: segResult.dice_scores.subcutaneous_fat, color: 'var(--color-green-600)' },
+              { title: '骨髓脂肪分数', value: segResult.volume_metrics.bone_marrow_fat_fraction_pct.toFixed(1), unit: '%', dice: segResult.dice_scores.bone_marrow, color: 'var(--color-gold-500)' },
+            ].map(({ title, value, unit, dice, color }) => (
+              <MiniChartCard
+                key={title}
+                title={title}
+                value={value}
+                unit={unit}
+                sparkline={[{ v: Number(value) * 0.85 }, { v: Number(value) * 0.92 }, { v: Number(value) }]}
+                sparklineColor={color}
+                trend="up"
+                trendValue={`DICE: ${dice.toFixed(2)}`}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ===== Summary ===== */}
       {segResult ? (
@@ -501,22 +483,7 @@ export default function ImageProcessingModule({ imageTask, projectId, onViewResu
           ]}
           columns={4}
         />
-      ) : (
-        <MetricSummaryCard
-          title="分析摘要"
-          metrics={[
-            { label: '肝脏 DICE', value: '—', unit: '' },
-            { label: '胰腺 DICE', value: '—', unit: '' },
-            { label: '内脏脂肪 DICE', value: '—', unit: '' },
-            { label: '皮下脂肪 DICE', value: '—', unit: '' },
-            { label: '骨髓 DICE', value: '—', unit: '' },
-            { label: 'QC 综合评分', value: '—', unit: '' },
-            { label: 'SNR', value: '—', unit: 'dB' },
-            { label: '运动伪影', value: '—', unit: '' },
-          ]}
-          columns={4}
-        />
-      )}
+      ) : null}
 
       {/* ===== QC & Warnings ===== */}
       {segResult && segResult.warnings.length > 0 && (

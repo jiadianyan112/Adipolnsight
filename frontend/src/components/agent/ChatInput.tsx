@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { ChatResponse } from '../../services/aiService';
 import { chatQuery, getAIJobStatus, getAIJobResult } from '../../services/aiService';
+import { isSuccessStatus, isFailedStatus } from '../../utils/jobStatus';
 import DashboardCard from '../shared/DashboardCard';
 import ProgressBar from '../shared/ProgressBar';
 
@@ -128,11 +129,11 @@ export default function ChatInput({ projectId, context, className = '' }: Props)
       const status = await getAIJobStatus(jobId);
       if (status.ok) {
         setJobProgress(status.data.progress || 0);
-        if (status.data.status === 'succeeded') {
+        if (isSuccessStatus(status.data.status)) {
           clearInterval(timer);
           setJobProgress(100);
           fetchJobResult(jobId);
-        } else if (status.data.status === 'failed') {
+        } else if (isFailedStatus(status.data.status)) {
           clearInterval(timer);
           setJobProgress(0);
         }

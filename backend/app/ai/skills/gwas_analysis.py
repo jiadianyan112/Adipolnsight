@@ -47,15 +47,13 @@ class GWASAnalysisSkill(Skill):
     def validate_input(self, input_data: Dict[str, Any]) -> bool:
         if "project_id" not in input_data:
             return False
-        phenotype = input_data.get("phenotype") or input_data.get("phenotype_name", "")
-        if not phenotype or not isinstance(phenotype, str):
-            return False
+        # phenotype is NOT strictly required — fallback reads from project DB
         return True
 
     def get_input_schema(self) -> Dict[str, Any]:
         return {
             "type": "object",
-            "required": ["project_id", "phenotype"],
+            "required": ["project_id"],
             "properties": {
                 "project_id": {"type": "integer"},
                 "phenotype_id": {"type": "string", "description": "表型 ID（如 Liver_PDFF）"},
@@ -82,53 +80,32 @@ class GWASAnalysisSkill(Skill):
 
     def _run_mock(self, input_data: Dict[str, Any], context: SkillContext) -> SkillOutput:
         time.sleep(0.5)
-        phenotype = input_data.get("phenotype_name") or input_data.get("phenotype", "Liver_PDFF")
+
+        # Resolve project context (tries input_data → database → fallback)
+        project_ctx = self._resolve_project_context(input_data, context.project_id)
+        phenotype = project_ctx["exposure"]
         method = input_data.get("method", "REGENIE")
         covariates = input_data.get("covariates", ["age", "sex", "bmi"])
         population = input_data.get("population_filter", "EUR")
 
-        sample_size = random.randint(35000, 45000)
-        lambda_gc = round(random.uniform(1.00, 1.05), 3)
-        n_lead = random.randint(8, 18)
-        n_loci = random.randint(12, 28)
-
-        # 生成先导 SNP
-        lead_snps = self._generate_lead_snps(n_lead)
-
-        # 生成显著位点
-        significant_loci = self._generate_significant_loci(lead_snps, n_loci)
-
-        # 生成 Manhattan 图数据点
-        manhattan_points = self._generate_manhattan_points(lead_snps, n_background=500)
-
-        # 生成 QQ 图数据
-        qq_points = self._generate_qq_points(lambda_gc, n_points=200)
+        from backend.app.ai.mock_result_factory import MockResultFactory
+        factory = MockResultFactory(project_ctx)
+        result = factory.build_gwas_result(
+            method=method,
+            significant_loci_count=random.randint(12, 28),
+            lead_snps_count=random.randint(8, 18),
+            lambda_gc=round(random.uniform(1.00, 1.05), 3),
+        )
+        # Override with specific input params
+        result["population"] = population
+        result["covariates"] = covariates
+        result["phenotype_id"] = input_data.get("phenotype_id", phenotype)
 
         out_dir = context.output_dir
         os.makedirs(out_dir, exist_ok=True)
 
-        seg_id = f"gwas_{uuid.uuid4().hex[:8]}"
-        manhattan_url = f"/api/v1/files/projects/{context.project_id}/outputs/gwas/manhattan.png"
-        qq_url = f"/api/v1/files/projects/{context.project_id}/outputs/gwas/qq_plot.png"
-
-        result = {
-            "gwas_id": seg_id,
-            "phenotype": phenotype,
-            "phenotype_id": input_data.get("phenotype_id", phenotype),
-            "method": method,
-            "population": population,
-            "sample_size": sample_size,
-            "lambda_gc": lambda_gc,
-            "significant_loci_count": n_loci,
-            "lead_snps_count": n_lead,
-            "covariates": covariates,
-            "significant_loci": significant_loci,
-            "lead_snps": lead_snps,
-            "manhattan_plot_url": manhattan_url,
-            "qq_plot_url": qq_url,
-            "manhattan_data_points": manhattan_points[:200],  # 最多返回 200 点给前端渲染
-            "qq_data_points": qq_points[:100],
-        }
+        result["manhattan_plot_url"] = f"/api/v1/files/projects/{context.project_id}/outputs/gwas/manhattan.png"
+        result["qq_plot_url"] = f"/api/v1/files/projects/{context.project_id}/outputs/gwas/qq_plot.png"
 
         # 写出文件
         with open(os.path.join(out_dir, "gwas_summary.json"), "w") as f:
@@ -146,12 +123,47 @@ class GWASAnalysisSkill(Skill):
                 "qq_plot.png",
             ],
             metrics={
-                "significant_loci_count": n_loci,
-                "lead_snps_count": n_lead,
-                "lambda_gc": lambda_gc,
-                "sample_size": sample_size,
+                "significant_loci_count": result["significant_loci_count"],
+                "lead_snps_count": result["lead_snps_count"],
+                "lambda_gc": result["lambda_gc"],
+                "sample_size": result["sample_size"],
             },
         )
+
+    @staticmethod
+    def _resolve_project_context(input_data: Dict[str, Any], project_id: int) -> Dict[str, Any]:
+        """Resolve project context: input_data → database → fallback."""
+        ctx: Dict[str, Any] = {"project_id": project_id, "exposure": "", "outcome": "", "sample_size": 40484}
+
+        # 1. From input_data
+        ctx["exposure"] = input_data.get("phenotype_name") or input_data.get("phenotype") or ""
+        ctx["outcome"] = input_data.get("outcome") or input_data.get("outcome_name") or ""
+
+        # 2. From project database
+        if not ctx["exposure"] or not ctx["outcome"]:
+            try:
+                from backend.app.database import SessionLocal
+                from backend.app.models.project import Project
+                db = SessionLocal()
+                try:
+                    project = db.query(Project).filter(Project.id == project_id).first()
+                    if project:
+                        if not ctx["exposure"]:
+                            ctx["exposure"] = project.exposure or ""
+                        if not ctx["outcome"]:
+                            ctx["outcome"] = project.outcome or ""
+                finally:
+                    db.close()
+            except Exception:
+                pass
+
+        # 3. Fallback (with explicit marker)
+        if not ctx["exposure"]:
+            ctx["exposure"] = "MOCK_UnknownExposure"
+        if not ctx["outcome"]:
+            ctx["outcome"] = "MOCK_UnknownOutcome"
+
+        return ctx
 
     # ==== Mock 数据生成器 ====
 

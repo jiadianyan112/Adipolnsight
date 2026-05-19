@@ -2,8 +2,11 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
-import { createAIReportJob, getAIJobStatus, getAIJobResult } from '../services/aiService';
+import { createAIReportJob, getAIJobStatus, getAIJobResult, adaptReportResult } from '../services/aiService';
+import { isSuccessStatus, isFailedStatus, TASK_TYPE_LABELS } from '../types';
 import type { ReportGenerationResult } from '../types';
+import { usePolling } from '../hooks/usePolling';
+import { useToastStore } from '../stores/toastStore';
 import ReportViewer from '../components/report/ReportViewer';
 import PageShell from '../components/shared/PageShell';
 import DashboardCard from '../components/shared/DashboardCard';
@@ -28,7 +31,8 @@ export default function ReportPage() {
   const [genStage, setGenStage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [generatingJobId, setGeneratingJobId] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [pollJobId, setPollJobId] = useState<string | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load project and tasks
   useEffect(() => {
@@ -36,16 +40,25 @@ export default function ReportPage() {
     fetchTasks(pid);
   }, [pid]);
 
-  // Check for pre-existing report from navigation state
+  // Check for pre-existing report job from navigation state (workspace pass-through)
   useEffect(() => {
-    if (loc.state?.report) {
-      setReport(loc.state.report);
-      setPageState('preview');
-    }
+    const jobId = loc.state?.reportJobId as string | undefined;
+    if (!jobId) return;
+    setPageState('generating');
+    setGeneratingJobId(jobId);
+    setPollJobId(jobId);
+    setGenProgress(5);
+    setGenStage('报告生成中...');
+    setSelectedJobIds([]); // Prevent selection state from overriding
+    // Clear navigation state to avoid re-triggering on refresh
+    nav(`/projects/${pid}/report`, { replace: true, state: {} });
   }, []);
 
   // Auto-detect completed jobs when tasks load
   useEffect(() => {
+    // Skip auto-detection if we were passed a jobId from workspace
+    if (loc.state?.reportJobId) return;
+
     if (tasks.length > 0 && pageState === 'loading') {
       const completedIds = tasks
         .filter((t) => t.status === 'success' && t.id > 0)
@@ -59,21 +72,125 @@ export default function ReportPage() {
     } else if (tasks.length > 0 && pageState === 'loading') {
       setPageState('no_data');
     } else if (tasks.length === 0 && pageState === 'loading') {
-      // Keep loading for a bit
       const timer = setTimeout(() => {
         setPageState((s) => (s === 'loading' ? 'no_data' : s));
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [tasks, pageState]);
+  }, [tasks, pageState, loc.state?.reportJobId]);
 
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+  // Cleanup progress timer on unmount
+  useEffect(() => () => {
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+  }, []);
 
-  const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  // Client-side progress animation — independent of API polling
+  useEffect(() => {
+    if (pageState !== 'generating') {
+      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+      return;
+    }
+    progressTimerRef.current = setInterval(() => {
+      setGenProgress((prev) => {
+        if (prev >= 90) return prev;
+        if (prev >= 70) return prev + Math.random() * 2;
+        return prev + Math.random() * 6;
+      });
+    }, 600);
+    return () => {
+      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+    };
+  }, [pageState]);
+
+  // Unified polling for report job status
+  usePolling({
+    enabled: pageState === 'generating' && !!pollJobId,
+    intervalMs: 2000,
+    maxIntervalMs: 10_000,
+    backoffFactor: 1.5,
+    maxRetries: 300,
+    immediate: true,
+    visibilityAware: true,
+    onTick: async () => {
+      const jId = pollJobId;
+      if (!jId) return false;
+
+      const status = await getAIJobStatus(jId);
+      if (!status.ok) {
+        setPageState('error');
+        setError(status.message);
+        return false;
+      }
+
+      const s = status.data.status;
+
+      if (isSuccessStatus(s)) {
+        setGenProgress(100);
+        setGenStage('完成');
+
+        const r = await getAIJobResult(jId);
+        if (!r.ok) {
+          setPageState('error');
+          setError(r.message || '获取报告结果失败');
+          return false;
+        }
+
+        const adapted = adaptReportResult(r.data);
+        if (adapted) {
+          setReport(adapted);
+          setPageState('preview');
+          useToastStore.getState().addToast({
+            type: 'success',
+            message: '科研报告生成完成',
+            description: '可查看、导出或返回工作区继续分析',
+            dedupKey: 'report-generation',
+          });
+        } else {
+          setPageState('error');
+          setError('报告结果解析失败：数据结构不匹配');
+          useToastStore.getState().addToast({
+            type: 'error',
+            message: '报告解析失败',
+            description: '数据结构不匹配，请联系管理员',
+            dedupKey: 'report-generation',
+          });
+        }
+        return false;
+      }
+
+      if (isFailedStatus(s)) {
+        setPageState('error');
+        setError(status.data.error_message || status.data.user_facing_error?.user_message || '报告生成失败');
+        useToastStore.getState().addToast({
+          type: 'error',
+          message: '报告生成失败',
+          description: status.data.error_message || '请检查错误日志并重试',
+          dedupKey: 'report-generation',
+        });
+        return false;
+      }
+
+      // Running — update progress from backend
+      if (typeof status.data.progress === 'number') {
+        setGenProgress((prev) => Math.max(prev, status.data.progress));
+      }
+      if (status.data.progress_stage) {
+        setGenStage(status.data.progress_stage);
+      }
+
+      return true;
+    },
+    onError: () => {
+      setPageState('error');
+      setError('轮询报告状态时出错');
+    },
+  });
 
   const handleGenerate = async () => {
     if (!selectedJobIds.length) return;
+
     setPageState('generating');
+    setPollJobId(null);
     setError(null);
     setGenProgress(0);
     setGenStage('创建报告任务...');
@@ -95,30 +212,10 @@ export default function ReportPage() {
 
     const jId = jobResult.data.job_id;
     setGeneratingJobId(jId);
+    setGenProgress(5);
     setGenStage('报告生成中...');
-
-    pollRef.current = setInterval(async () => {
-      const status = await getAIJobStatus(jId);
-      if (!status.ok) { stopPolling(); setPageState('error'); setError(status.message); return; }
-      setGenProgress(status.data.progress);
-      setGenStage(status.data.progress_stage);
-
-      if (status.data.status === 'succeeded') {
-        stopPolling();
-        const r = await getAIJobResult(jId);
-        if (r.ok && r.data.result) {
-          setReport(r.data.result as unknown as ReportGenerationResult);
-          setPageState('preview');
-        } else {
-          setPageState('error');
-          setError('报告结果解析失败');
-        }
-      } else if (status.data.status === 'failed') {
-        stopPolling();
-        setPageState('error');
-        setError(status.data.error_message || '报告生成失败');
-      }
-    }, 2000);
+    // Trigger polling by setting the job ID
+    setPollJobId(jId);
   };
 
   const toggleJob = (jobId: string) => {
@@ -191,7 +288,7 @@ export default function ReportPage() {
             </div>
             <div className="space-y-1">
               <ProgressBar value={genProgress} size="sm" />
-              <p className="text-xs text-text-muted">{genProgress}%</p>
+              <p className="text-xs text-text-muted">{Math.round(genProgress)}%</p>
             </div>
             <p className="text-xs text-text-muted">
               正在整合 {selectedJobIds.length} 个已完成分析的结果...
@@ -289,7 +386,7 @@ export default function ReportPage() {
                       className="w-4 h-4 mt-0.5 rounded border-border text-navy-600 focus:ring-navy-600"
                     />
                     <div className="min-w-0 text-xs">
-                      <p className="font-heading font-semibold text-text-primary truncate">{t.task_name || t.task_type}</p>
+                      <p className="font-heading font-semibold text-text-primary truncate">{TASK_TYPE_LABELS[t.task_type] || t.task_name || t.task_type}</p>
                       <p className="text-text-muted mt-0.5">ID: {t.id} · {t.task_type}</p>
                       <p className="text-[10px] text-text-muted mt-1">
                         {t.finished_at ? new Date(t.finished_at).toLocaleString() : '—'}

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer } from 'recharts';
 import DashboardCard from './DashboardCard';
+import SafeChartContainer from '../charts/SafeChartContainer';
 
 interface SparklinePoint {
   v: number;
@@ -32,31 +33,35 @@ const trendIcons: Record<string, string> = {
 
 function Sparkline({ data, color = 'var(--color-navy-600)' }: { data: SparklinePoint[]; color?: string }) {
   return (
-    <div className="h-10 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
-          <Line
-            type="monotone"
-            dataKey="v"
-            stroke={color}
-            strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="w-full" style={{ minHeight: 40 }}>
+      <SafeChartContainer minHeight={40} fallback={<div className="h-10" />}>
+        <ResponsiveContainer width="100%" height={40}>
+          <LineChart data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
+            <Line
+              type="monotone"
+              dataKey="v"
+              stroke={color}
+              strokeWidth={1.5}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </SafeChartContainer>
     </div>
   );
 }
 
 function MiniBar({ data, color = 'var(--color-navy-600)' }: { data: SparklinePoint[]; color?: string }) {
   return (
-    <div className="h-10 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
-          <Bar dataKey="v" fill={color} radius={[2, 2, 0, 0]} isAnimationActive={false} />
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="w-full" style={{ minHeight: 40 }}>
+      <SafeChartContainer minHeight={40} fallback={<div className="h-10" />}>
+        <ResponsiveContainer width="100%" height={40}>
+          <BarChart data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
+            <Bar dataKey="v" fill={color} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </SafeChartContainer>
     </div>
   );
 }

@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import api from '../services/apiClient';
+import api, { aiApi } from '../services/apiClient';
 import type { AnalysisResult, Report } from '../types';
+
+/** 统一报告生成返回结构 */
+export interface ReportGenerationResult {
+  report_id?: number;
+  project_id: number;
+  job_id: string;
+  status: string;
+  message?: string;
+}
 
 interface ResultState {
   currentResult: AnalysisResult | null;
@@ -8,7 +17,8 @@ interface ResultState {
   loading: boolean;
   fetchResult: (taskId: number) => Promise<void>;
   fetchReport: (reportId: number) => Promise<void>;
-  generateReport: (projectId: number) => Promise<Report>;
+  /** 统一报告生成入口 — 通过 JobManager 创建 report_generation Job */
+  generateReport: (projectId: number) => Promise<ReportGenerationResult>;
 }
 
 export const useResultStore = create<ResultState>((set) => ({
@@ -37,8 +47,28 @@ export const useResultStore = create<ResultState>((set) => ({
   },
 
   generateReport: async (projectId) => {
-    const res = await api.post(`/projects/${projectId}/reports/generate`);
-    set({ currentReport: res.data });
-    return res.data;
+    // 使用统一的 JobManager 路径
+    const res = await aiApi.post('/ai/report/jobs', {
+      project_id: projectId,
+      parameters: {
+        report_type: 'full',
+        language: 'zh-CN',
+        include_figures: true,
+        include_tables: true,
+        include_ai_interpretation: true,
+      },
+    });
+
+    const data = res.data;
+    if (!data.success) {
+      throw new Error(data.error?.message || '创建报告任务失败');
+    }
+
+    return {
+      project_id: projectId,
+      job_id: data.data.job_id,
+      status: data.data.status || 'queued',
+      message: data.data.message || '报告生成任务已提交',
+    };
   },
 }));
